@@ -10,6 +10,8 @@
 //! (`core::meta`, `core::scanner`, etc.) depend on this trait rather than on
 //! [`std::fs`] or [`std::path`] directly.
 
+pub mod filesystem;
 pub mod path;
 
+pub use filesystem::{FileSystem, FsError, Metadata, StdFileSystem};
 pub use path::{ProjectPath, ProjectPathError};
