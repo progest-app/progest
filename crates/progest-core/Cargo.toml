@@ -23,6 +23,7 @@ blake3.workspace = true
 [dev-dependencies]
 anyhow.workspace = true
 tempfile.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true

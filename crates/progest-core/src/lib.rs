@@ -9,6 +9,7 @@
 //! `rename`, and `doctor` modules alongside the existing [`fs`] module.
 
 pub mod fs;
+pub mod identity;
 
 /// The crate version, synced with the workspace.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
