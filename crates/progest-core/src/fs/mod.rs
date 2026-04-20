@@ -11,7 +11,9 @@
 //! [`std::fs`] or [`std::path`] directly.
 
 pub mod filesystem;
+pub mod ignore;
 pub mod path;
 
 pub use filesystem::{FileSystem, FsError, Metadata, StdFileSystem};
+pub use ignore::{DEFAULT_PATTERNS, IgnoreError, IgnoreRules, USER_IGNORE_PATH};
 pub use path::{ProjectPath, ProjectPathError};
