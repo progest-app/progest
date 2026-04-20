@@ -1,2 +1,51 @@
 [tools]
 rust = "1.95"
+node = "22"
+pnpm = "10.33"
+
+# Workflow tasks. Run with e.g. `mise run check`.
+# Tasks cover both the Rust workspace and the pnpm workspace, so CI and
+# local development stay in sync.
+
+[tasks.install]
+description = "Install pnpm dependencies"
+run = "pnpm install"
+
+[tasks.build]
+description = "Build the Rust workspace and the frontend"
+depends = ["install"]
+run = [
+  "cargo build --workspace",
+  "pnpm --filter @progest/app build",
+]
+
+[tasks.check]
+description = "Run all static checks: rustfmt, clippy, tsc (must pass before committing)"
+depends = ["install"]
+run = [
+  "cargo fmt --all -- --check",
+  "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+  "pnpm --filter @progest/app typecheck",
+]
+
+[tasks.fmt]
+description = "Format Rust sources with rustfmt"
+run = "cargo fmt --all"
+
+[tasks.test]
+description = "Run all Rust tests"
+run = "cargo test --workspace"
+
+[tasks.dev]
+description = "Start the frontend dev server (Vite on :1420)"
+depends = ["install"]
+run = "pnpm --filter @progest/app dev"
+
+[tasks.tauri-dev]
+description = "Run the Tauri desktop app against the Vite dev server"
+depends = ["install"]
+run = "cargo run -p progest-tauri --bin progest-desktop"
+
+[tasks.cli]
+description = "Run the progest CLI — pass arguments after --, e.g. `mise run cli -- scan`"
+run = "cargo run -p progest-cli --"
