@@ -1,0 +1,35 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Progest",
+  "version": "0.1.0",
+  "identifier": "app.progest.progest",
+  "build": {
+    "frontendDist": "../../app/dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "pnpm --filter @progest/app dev",
+    "beforeBuildCommand": "pnpm --filter @progest/app build"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "title": "Progest",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 800,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": false,
+    "targets": "all",
+    "category": "DeveloperTool",
+    "copyright": "Copyright (c) 2026 Progest contributors",
+    "shortDescription": "Naming-rule-first file management for creative projects.",
+    "longDescription": "Progest brings naming convention enforcement, sidecar metadata, and fast full-project search to creative pipelines."
+  }
+}
