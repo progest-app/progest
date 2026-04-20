@@ -1,0 +1,205 @@
+# CLAUDE.md
+
+Claude Code 向けのプロジェクト作業指示。このリポジトリで作業する前に必ず通読すること。
+
+---
+
+## プロジェクト概要
+
+Progest は、映像・ゲーム・3DCG・VFX 等のパイプライン系クリエイター向けプロジェクト・ファイル管理ツール。命名規則ファースト設計、sidecar メタデータ（`.meta`）、高速検索をローカル完結で提供する。対象は個人〜小規模スタジオ（5〜30人）。
+
+正確な定義・機能スコープ・非機能要件は [docs/REQUIREMENTS.md](./docs/REQUIREMENTS.md)、実装計画は [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md) を参照。
+
+現在のフェーズ: **M0 Skeleton**。コード未着手、要件・計画ドキュメントのみ存在。
+
+---
+
+## 不明点の扱い（最重要）
+
+**このリポジトリで作業する時、仕様・設計・UX の判断で少しでも迷ったら、実装を進める前に必ずユーザーに確認すること。**
+
+理由:
+- Progest はドメイン固有性が非常に高い（パイプライン現場のワークフロー、命名規則文化、meta 衝突の運用、DCC 連携の微妙な挙動）
+- コード上の正しさだけで判断するとユーザーの期待から外れる
+- 要件書はハイレベルな意思決定の記録。細部の UX や挙動は書ききれていない
+
+確認すべき具体的な場面:
+- 要件書・実装計画書に明示記載のない挙動
+- 「こうあるべき」と思っても明示されていない UX 選択
+- 既存の決定事項と衝突する設計課題が出た時
+- 技術選定で複数候補があり一本化されていない時
+- MVP スコープの解釈が分かれる時
+- 命名規則の評価結果、merge driver の競合解決、watch の挙動など、ユーザーが見て驚きうる挙動
+- ファイルを破壊的に扱う操作（rename, delete, move, .meta 書換）の条件
+
+原則: **確認せずに「たぶんこうだろう」で進めない。短い問い合わせを頻繁に、が正解。**
+
+ユーザーから「毎回聞かなくていい」と明示された領域のみ、自律的に判断してよい。
+
+**確認時は `AskUserQuestion` ツールを優先使用する。** 選択肢を提示する形式の問いは平文より `AskUserQuestion` の方がユーザーが判断しやすい。自由記述が必要な時のみ平文で聞く。推奨案がある場合は最初の選択肢に `(Recommended)` を付ける。
+
+---
+
+## アーキテクチャ
+
+モノレポ構成:
+
+| パッケージ | 役割 |
+| --- | --- |
+| `crates/progest-core` | ドメインロジック全て（meta I/O、FS、規則エンジン、index、search、watch、reconcile、thumbnail、template、AI クライアント、rename） |
+| `crates/progest-cli` | CLI バイナリ。core を直接使用 |
+| `crates/progest-merge` | `.meta` 用 git merge driver（単機能バイナリ） |
+| `crates/progest-tauri` | Tauri IPC glue。薄層、core を呼ぶだけ |
+| `app/` | React + shadcn/ui フロントエンド。Tauri IPC 経由で core にアクセス |
+
+**ビジネスロジックをフロントエンド層に書かない。** UI は描画とユーザー入力の受け流しのみ。全てのロジックは core に集約する。理由: CLI、Lua 拡張（v2+）、将来のヘッドレス利用で同じロジックが使われるため。
+
+---
+
+## 重要な設計原則
+
+### `.meta` が真実源
+- SQLite index（`.progest/index.db`）は再構築可能なキャッシュ。整合性の基準は常に `.meta`
+- index 破損時は削除して startup scan で再構築
+
+### watch を信頼しない
+- 三段構え: `startup full scan` + `OS watch (notify)` + `periodic reconcile (5分)` 
+- watch は最速反映のヒントにすぎない
+- watch 単独でインデックス更新しない。必ず reconcile で事後補正
+
+### UUID はコピーで継承しない
+- ファイル複製時は必ず新規 UUID 発行 + `source_file_id` に元 UUID を記録
+- 同一 `file_id` が複数パスに現れたら即 conflict、UI で解決肢を提示
+
+### 規則評価は説明可能であること
+- どの規則が勝ったか（勝利 rule_id、継承チェーン）を常にトレース
+- lint レポート・違反 UI に必ず表示
+
+### 破壊的操作は必ず preview → confirm
+- rename、bulk apply、merge resolution 全て
+- undo history を N 件残す（デフォルト 20）
+
+### `.meta` 書込は原子的
+- temp file（`foo.psd.meta.tmp`）→ rename
+- 失敗時は `.progest/local/pending/` にキュー、バックオフ再試行
+
+### ignore は厳格に
+- デフォルト: `.git/`, `node_modules/`, `.DS_Store`, `Thumbs.db`, `*.tmp`, DCC autosave 等
+- `.progest/index.db`, `.progest/thumbs/`, `.progest/local/` は必ず gitignore
+- `.progest/project.toml`, `rules.toml`, `schema.toml`, `views.toml`, `ignore` は git 共有
+
+### パスは抽象化して扱う
+- `std::path::Path` を直接使わず、`progest_core::fs::ProjectPath` 経由
+- Windows 移植時（v1.1）の長パス・大小文字・UNC 対応をこの層で吸収
+
+---
+
+## プラットフォーム優先度
+
+| OS | v1.0 | 備考 |
+| --- | --- | --- |
+| macOS | 主対象 | Darwin 11+、FSEvents 経由 notify、notarization 必須 |
+| Windows | 対象外（v1.1） | 長パス、ロック、rename 複数イベント、OneDrive Placeholder 対応を後で |
+| Linux | ベストエフォート（v2+） | inotify 上限対応が必要 |
+
+v1.0 は macOS だけを対象にビルド・テストする。ただし core のパス抽象・FS trait はクロスプラ前提で設計する。
+
+---
+
+## コード規約
+
+### Rust
+- `cargo fmt` + `cargo clippy --all-targets -- -D warnings` 必須
+- アプリケーション層（CLI、Tauri glue）は `anyhow`、ライブラリ（core）は `thiserror`
+- ロギングは `tracing`
+- public API には doc comment 必須
+- **テストは必ず書く。** 新規ロジックに対応するテストなしで PR を出さない。規則評価はゴールデンテスト、FS 操作は tempdir を使う統合テスト、パーサ類はプロパティテスト検討。バグ修正時は「失敗を再現するテスト」を先に書いてから修正する
+- IO は trait 越し（`FileSystem`, `MetaStore`, `Index`）、差し替え可能性を保つ
+
+### TypeScript
+- `pnpm` workspace
+- shadcn/ui コンポーネント起点、独自 UI 部品は最小限
+- 状態管理: Tauri IPC を軸にしつつ、ローカル UI state は zustand、非同期は TanStack Query（`@tanstack/react-query`）
+- IPC は型付きラッパー経由（手書きの `invoke` 禁止）
+- emoji を UI に入れる場合はユーザーの明示許可があるときのみ
+
+### コミット / PR
+- **1 論理単位ごとに必ずコミットする。** 作業完了時にまとめてコミットしない。ロジック追加・リファクタ・テスト追加・スタイル修正はそれぞれ別コミット。「仕様変更 + テスト追加 + 無関係な typo 修正」が 1 コミットに混ざるのは禁止
+- コミットせずに複数論理変更を積み上げない。次の変更に進む前にコミット
+- **コミットメッセージと PR（タイトル・本文・レビューコメント）は英語で書く。** ユーザーとのチャットは日本語で構わないが、リポジトリに残る成果物（commit message, PR description, code comment）は原則英語。Conventional Commits 推奨（`feat:`, `fix:`, `refactor:`, `test:`, `docs:`, `chore:`）
+- コミット本文は「なぜ」を書く。「何を」は diff で分かる
+- 例外的にまとめたい場合（相互依存で段階分割不可 等）はユーザーに事前確認
+
+---
+
+## よく使うコマンド
+
+（M0 完了後に実効化。現在は placeholder）
+
+```bash
+# Rust
+cargo build
+cargo test --workspace
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all
+
+# フロントエンド
+pnpm install
+pnpm -C app dev
+pnpm -C app build
+
+# 統合開発（Tauri）
+pnpm tauri dev
+
+# CLI ローカルインストール
+cargo install --path crates/progest-cli
+```
+
+---
+
+## 避けるべきこと
+
+- **フロントエンドにビジネスロジックを書く**（全て core へ）
+- **`.meta` の直接編集**（必ず `core::meta` API 経由、原子書込を壊さない）
+- **watch イベントを真実源として扱う**（reconcile で補正する前提）
+- **feature creep**（Lua、クラウド同期、Windows 固有層、lindera 等を v1 で先回り実装）
+- **`.progest/index.db` を git 管理下に置く**
+- **`.meta` にタイムスタンプ以外の衝突しやすいフィールドを追加する**
+- **絶対パスの保存**（全てプロジェクトルート相対）
+- **「たぶんこうだろう」で仕様外の判断をする**（ユーザーに確認）
+
+---
+
+## 現在の開発ステージ
+
+**M0 Skeleton**。具体的には:
+
+- workspace（Cargo.toml, pnpm-workspace.yaml）未作成
+- Tauri scaffold 未作成
+- CI 未設定
+- CLI は `--version` すら未実装
+
+着手順は [docs/IMPLEMENTATION_PLAN.md §5](./docs/IMPLEMENTATION_PLAN.md) のマイルストーンに従う。M0 で何をするかはそこに明記。
+
+---
+
+## 参照すべきドキュメント
+
+作業前に必ず目を通す:
+- [docs/REQUIREMENTS.md](./docs/REQUIREMENTS.md) — 要件定義書（日本語）
+- [docs/IMPLEMENTATION_PLAN.md](./docs/IMPLEMENTATION_PLAN.md) — 実装計画・マイルストーン・スキーマ
+- [docs/_DRAFT.md](./docs/_DRAFT.md) — 初期ドラフト（歴史参考）
+
+ユーザー向け:
+- [README.md](./README.md) — 英語版 README
+- [README.ja.md](./README.ja.md) — 日本語版 README
+
+---
+
+## 作業パターン
+
+1. 着手前に該当セクションを REQUIREMENTS / IMPLEMENTATION_PLAN で確認
+2. **仕様に書かれていない判断が必要なら、手を動かす前にユーザーに確認**
+3. 小さく変更、先にテスト、**1 論理単位ごとに必ずコミット**
+4. 破壊的操作（rename、delete、移動、git の force 系）は必ずユーザー確認
+5. 終了時は変更内容と次にやるべきことを 1〜2 文で報告
