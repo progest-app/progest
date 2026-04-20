@@ -222,16 +222,23 @@ CREATE INDEX idx_history_applied_at ON history(applied_at);
 
 ## 5. マイルストーン
 
-### M0 — Skeleton（0.5ヶ月）
+### M0 — Skeleton（0.5ヶ月、ほぼ完了）
 **目的**: 開発基盤を動く状態にする。
 
-- workspace 作成、`cargo build` 通る
-- Tauri scaffold、shadcn/ui 初期化
-- GitHub Actions: cargo build/test/fmt/clippy、pnpm lint
-- macOS 向けバイナリビルドと DMG 生成の動線
-- プレースホルダ CLI `progest --version`
+- [x] Cargo workspace（resolver v3、Rust 1.95、edition 2024）
+- [x] `progest-core` / `progest-cli` / `progest-merge` / `progest-tauri` の 4 クレートスキャフォールド（`cargo build --workspace` 通る）
+- [x] Vite + React 19 + TypeScript の `app/`（`pnpm build` 通る）
+- [x] pnpm workspace（`@progest/app`）
+- [x] Tauri v2 シェル（`pnpm tauri:dev` でウィンドウ起動確認）
+- [x] GitHub Actions: `check`（fmt + clippy + tsc）, `test`, mac `build`
+- [x] mise タスク（check/test/build/fmt/dev/tauri-dev/tauri-build/cli）
+- [x] lefthook による pre-commit/commit-msg/pre-push hook
+- [x] CLI サブコマンド骨格（`init`/`scan`/`doctor`/`lint`/`search` を todo!() で定義）
+- [ ] shadcn/ui 初期化 → **M3 で導入**（UI 実装が始まるタイミング）
+- [ ] アイコン差し替え → **M5**（現在は placeholder）
+- [ ] macOS DMG / notarization → **M5**
 
-完了条件: macOS で空の Tauri ウィンドウが立ち上がり、CLI が動き、CI がグリーン。
+完了条件: macOS で `mise run tauri-dev` がウィンドウ表示、`mise run check` 全グリーン、CI 全グリーン。
 
 ### M1 — Core data layer（1ヶ月）
 **目的**: `.meta` が作れて、走査が通り、インデックスに入る。
