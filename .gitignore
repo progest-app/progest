@@ -1,0 +1,43 @@
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock.bak
+
+# Node
+node_modules
+.pnpm-store
+.turbo
+
+# Frontend build output
+app/dist
+app/.vite
+crates/progest-tauri/gen
+
+# Tauri
+/src-tauri/target
+/src-tauri/gen/schemas
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.example.json
+*.swp
+*~
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Progest runtime (inside managed projects — not this repo)
+.progest/index.db
+.progest/thumbs
+.progest/local
+
+# Local scratch
+/scratch
+/tmp
