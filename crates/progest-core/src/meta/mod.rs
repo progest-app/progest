@@ -13,10 +13,12 @@
 //! The `.dirmeta.toml` reader and the failed-write pending queue are
 //! intentionally out of scope for this first slice and land as follow-up PRs.
 
+pub mod dirmeta;
 pub mod document;
 pub mod pending;
 pub mod store;
 
+pub use dirmeta::{DIRMETA_FILENAME, DirmetaDocument, dirmeta_path, load_dirmeta, save_dirmeta};
 pub use document::{
     CoreSection, Kind, MetaDocument, MetaError, NamingSection, NotesSection, SCHEMA_VERSION,
     Status, TagsSection,
