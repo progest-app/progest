@@ -141,6 +141,7 @@ mise install                    # 初回のみ（ツールチェーン導入）
 
 mise run check                  # rustfmt --check + clippy -D warnings + tsc
 mise run test                   # cargo test --workspace
+mise run bench                  # cargo bench --workspace（例: M1 の 10k scan ゲート）
 mise run build                  # cargo build + vite build
 mise run fmt                    # cargo fmt --all
 
