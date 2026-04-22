@@ -1,0 +1,235 @@
+# 学び・はまりどころ
+
+過去セッションで踏んだ落とし穴と解決策。同じ穴を踏まないための備忘録。モジュール・テーマ別に整理してあり、grep でも辿りやすくしてある。
+
+新しく気づいた落とし穴は該当セクションの末尾に追記する。セクションが見当たらない場合は迷わず新設する。
+
+---
+
+## 1. セットアップ・ツールチェーン
+
+### Tauri アイコンは実データが 128×128 RGBA を満たす必要
+- `generate_context!()` は**ビルド時に**アイコンを埋め込み、tauri ランタイムが**起動時に**それを RGBA に decode する
+- 「PNG ヘッダ上は 128×128 だが IDAT の実ピクセル数が足りない」placeholder を置くと起動時に `invalid icon: dimensions 128x128 don't match rgba pixel count` で panic
+- 解決: `magick -size 128x128 canvas:'#xxx' PNG32:icon.png` のように実データが満たされる PNG を使う
+- 場所: `crates/progest-tauri/icons/icon.png`
+
+### Tauri 開発起動は必ず tauri CLI 経由
+- `cargo run -p progest-tauri --bin progest-desktop` は **Vite 未起動のまま WebView が devUrl を叩きに行き真っ白画面**になる
+- `tauri dev` が `beforeDevCommand`（Vite 起動）を実行 → port 1420 を待機 → アプリ起動、の三段を面倒見る
+- 実行経路: `mise run tauri-dev` → `pnpm tauri:dev` → `tauri dev -c crates/progest-tauri/tauri.conf.json`
+
+### tauri.conf.json の配置が非標準（`crates/progest-tauri/`）
+- 通常の tauri プロジェクトは `src-tauri/tauri.conf.json` を自動検出
+- 本プロジェクトはモノレポ都合で `crates/progest-tauri/` 配下
+- 結果: すべての tauri CLI 呼び出しで `-c crates/progest-tauri/tauri.conf.json` が必須
+- root `package.json` の `tauri`/`tauri:dev`/`tauri:build` スクリプトが config パスをラップしているので、手で tauri CLI を叩くときはこれらを経由する
+
+### lefthook.yml の `{N}` プレースホルダはクォート必須
+- `run: grep -qE "^Signed-off-by: " {1}` は YAML パーサに `{1}` が object 開始扱いされエラー
+- 解決: `run: 'grep -qE "^Signed-off-by: " {1}'` のように run 値全体を single quote で囲む
+
+### mise.toml と rustup の関係
+- `rust-toolchain.toml` を置くだけでは、mise 未活性のシェルでは rustup のデフォルト（古いバージョン）が拾われる
+- ローカル実行時は `mise exec -- cargo ...` を必ず挟む or mise activate でシェル統合する
+- CI は `jdx/mise-action` が mise.toml を読むので気にしなくて良い
+
+### pnpm の postinstall スキップ
+- pnpm v10 はセキュリティ上 `esbuild` や `lefthook` の postinstall を**デフォルトでスキップ**する（"Ignored build scripts" 警告）
+- 多くの場合は `pnpm exec <tool>` で動作するので approve 不要
+- どうしても必要な場面（例: esbuild の native binary 切替）で `pnpm approve-builds` を検討
+
+### Tauri v2 の Linux ビルド依存
+- CI の ubuntu ランナーで tauri crate を clippy/build するには `libwebkit2gtk-4.1-dev`, `libxdo-dev`, `libssl-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev` が必要
+- `.github/workflows/ci.yml` にインストールステップが入っている
+- ローカル Linux では mise では提供されないので apt で入れる
+
+### lefthook の hook install はタイミング依存
+- lefthook は `pnpm install` の postinstall で入るが、pnpm v10 は postinstall をスキップするので、明示的に `pnpm exec lefthook install` を走らせるまで `.git/hooks/` は空
+- `mise run check` が都度 `lefthook install` を呼ぶので、check を一度も通していない状態で commit すると **DCO 署名チェックも pre-commit の fmt もすり抜けて commit が通ってしまう**
+- 結果、一部 commit が DCO 未署名のまま積み上がる事故が起きる
+- 予防: 新しい clone / session 冒頭で、最初の commit 前に必ず `mise run check` を一度走らせる
+
+### 一度作った commit に GPG 署名を後付けする
+- `commit.gpgsign = true` でも、GPG agent がロック中で pinentry が出ない非対話環境では署名されず、`%G?` が `N` の commit が生まれる
+- 対処: ブランチを `git rebase -f -S main` で強制再適用すると全 commit が署名付きで書き換わる（`-f` は no-op rebase を強制、`-S` で signing）
+- force push は `--force-with-lease` を使うこと（他セッションの push に上書きしない）
+- ただし **main / master に対しては force push しない**（規約と git hook で二重防衛）
+
+### `mise exec --cd <repo>` は cwd を repo ルートに戻す
+- `cd /tmp/X && mise exec --cd /path/to/repo -- cargo run ...` だと、cargo は repo から動くが、実行時の working directory は `--cd` で指定した repo になる
+- 結果: 手動で tempdir に cd しても `progest init` が repo ルートに `.progest/` を作ってしまう事故が起きる
+- 対策: smoke test は `cargo build` で binary を `target/debug/progest` に作り、その path を絶対パスで叩く（`$BIN init` のように）。cargo 経由だと cwd 制御が効かない
+- 検証ルール: CLI の smoke test で tempdir を使うなら、実行前に必ず `pwd` を echo して想定通りか確認する
+
+---
+
+## 2. Rust / clippy pedantic の癖
+
+### clippy pedantic の doc_markdown は頭字語を「項目」扱いする
+- doc コメントに `UUIDv7`, `RFC9562`, `DCC` 等の裸の頭字語を書くと `item in documentation is missing backticks` でエラー
+- バッククオートで囲む（`` `UUIDv7` ``）か、英単語化する
+- 通常の proper noun（`Tauri`、`macOS`）はセーフ、完全大文字トークンで要注意
+
+### `io::Error::new(ErrorKind::Other, ...)` は clippy pedantic で禁止
+- Rust 1.74+ の `io::Error::other(msg)` に置換される。clippy の `io_other_error` が `-D warnings` で拒否する
+- `ErrorKind::Other` に特定の意味を持たせる他用途では `io::Error::new` で別の kind を指定する
+
+### serde の `with` module は `serialize(value: &T, ...)` を要求、clippy `ref_option` に引っかかる
+- `#[serde(with = "my_mod")]` を `Option<FileId>` に当てると、`my_mod::serialize` の第一引数は仕様上 `&Option<FileId>` 固定
+- clippy pedantic の `ref_option` は `Option<&T>` への書換えを要求してくるが、serde 契約と競合して書換え不可
+- 妥協: `serialize` 関数だけに `#[allow(clippy::ref_option)]` をローカル付与し、理由コメント（「serde's `with` contract requires `&Option<T>`」）を添える
+- 場所: `crates/progest-core/src/meta/document.rs::source_file_id_serde::serialize`
+
+### `SystemTime` を i64 unix 秒に落とす時は unwrap を避ける
+- `duration_since(UNIX_EPOCH)` は epoch 前の時刻で `Err(SystemTimeError)` を返すし、`as_secs()` → `i64` の変換も 2262 年以降でオーバーフローしうる
+- clippy pedantic 環境では `map(..).unwrap_or(..)` が `map_unwrap_or` で拒否されるので `map_or(default, closure)` を使う
+- `time` / `chrono` 依存を足さずに FileRow.mtime を埋めるためだけなら、`t.duration_since(UNIX_EPOCH).map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))` で十分。`created_at` / `last_seen_at` の RFC3339 文字列化が必要になったら crate 導入を検討する
+
+### integration test のヘルパ関数は `&self` を取らないと `unused_self` で弾かれる
+- `Harness::sidecar(&self, rel)` のようなヘルパは clippy pedantic の `unused_self` に刺さる
+- 対処: `&self` を使わない関数はモジュールレベルの free function に切り出す（`fn sidecar(rel: &str) -> ProjectPath`）
+- 場所: `crates/progest-core/tests/reconcile_flow.rs`
+
+### `MemFileSystem` は Clone 不可、共有が必要なら借用で渡す
+- `Mutex<BTreeMap<...>>` を内部に持つため `MemFileSystem` に Clone を derive できない（`Mutex` 自体が Clone ではない）
+- `StdFileSystem` は Clone 可能だが、どちらでも動くヘルパを書きたいとき `F: FileSystem + Clone` を要求すると `MemFileSystem` 側が脱落する
+- 対処: 所有せず `&F` を受け取る設計にする。`PendingQueue<'a, F>` がこの例。`PhantomData` 抜きの借用ジェネリックで十分
+- 場所: `crates/progest-core/src/meta/pending.rs::PendingQueue`
+
+---
+
+## 3. core::fs（Path / ignore）
+
+### `ignore` crate の `Gitignore::matched` はディレクトリ除外をカスケードしない
+- `matched(path, is_dir)` は渡されたパス自身しか判定しない。例えば `.progest/` パターンが有効でも `.progest/index.db` に対して `matched` は `None` を返す
+- ディレクトリ除外を子孫まで効かせるには `matched_path_or_any_parents(path, is_dir)` を使う
+- 場所: `crates/progest-core/src/fs/ignore.rs::IgnoreRules::is_ignored`
+
+### `std::path::Path::components()` は `foo//bar` を正規化する
+- 多重スラッシュは `Path::components()` で自動的に 1 つに潰される。結果、`ProjectPath::new("foo//bar")` を `Path::components()` ベースだけで検証しても空セグメント違反を検出できない
+- 文字列入力ベースの `new` 側で `raw.contains("//")` を事前チェックする
+- 場所: `crates/progest-core/src/fs/path.rs::ProjectPath::new`
+
+---
+
+## 4. TOML round-trip / serde
+
+### TOML round-trip で未知フィールドを保持する実装パターン
+- `.meta` は git 同期でバージョン差のある teammate 間を行き来するので、現行ビルドが知らないキーを save で落とさないことが要件
+- 解決: 既知フィールドを typed struct で宣言しつつ、各 struct に `#[serde(flatten)] pub extra: toml::Table` を足す。top-level だけでなく `[core]` 等のセクション内の未知キーまで拾える
+- `toml` crate 0.8 では `flatten` + `toml::Table` の組み合わせが round-trip で期待通り動く（`toml_edit` の重量級 API を入れずに済む）
+- 場所: `crates/progest-core/src/meta/document.rs::MetaDocument` と `CoreSection` / `NamingSection` / `TagsSection` / `NotesSection`
+
+### `.dirmeta.toml` の未知セクションは `extra: toml::Table` で round-trip
+- `[accepts]` は M2 `core::accepts` で typed スキーマを追加する予定。それまでに `.dirmeta.toml` を手編集されても loader が round-trip で保存を壊さないよう、`#[serde(flatten)] extra` を付けておく
+- `core::accepts` は `document.extra.get("accepts")` で typed に parse し、書き戻しは `document.extra.insert("accepts", ...)` で行う。loader 側が知らない他セクション（`[import]` など将来の拡張）も同じパスで保護される
+- 場所: `crates/progest-core/src/meta/dirmeta.rs::DirmetaDocument`
+
+---
+
+## 5. SQLite / rusqlite
+
+### `rusqlite::Connection` は `Send` だが `Sync` ではない
+- 内部に `RefCell<StatementCache>` を持つため、複数スレッドから `&Connection` を共有できない
+- `pub trait Index: Send + Sync` を満たすには、`SqliteIndex` 内部で `Mutex<Connection>` として包んで interior mutability を提供する必要がある
+- 副次効果として trait メソッドが全て `&self` になり、`FileSystem` / `MetaStore` と API style が揃う（`&mut self` だと `Arc<dyn Index>` で扱いづらい）
+- SQLite 自体が内部でシリアライズするのでアプリ側 `Mutex` のオーバーヘッドは無視できる
+- 場所: `crates/progest-core/src/index/store.rs::SqliteIndex`
+
+### `PRAGMA foreign_keys` は接続ごと、かつデフォルト OFF
+- `CREATE TABLE ... REFERENCES ... ON DELETE CASCADE` を書いても、接続で `PRAGMA foreign_keys = ON` を実行しないと **cascade が静かに無視される**（制約違反も検知されない）
+- `SqliteIndex::init` で `conn.pragma_update(None, "foreign_keys", true)` を必ず呼ぶ
+- Regression test: 不明な `file_id` で `tag_add` すると失敗することを確認する。これが通らないなら pragma が消えている
+- `tags` の cascade delete が機能するかは doctor の orphan detection（M2+）の正しさに直結する
+
+### Migration 冪等性は「再実行で壊れる設計」で間接的に担保
+- `schema_version` row の `COUNT` を見るテストは書けるが、より強い保証は「もし migration が再実行されたら `CREATE TABLE files` が既存テーブル衝突で panic する」状態を保つこと
+- つまり初期 migration の SQL に `IF NOT EXISTS` を**入れない**。壊れたら即 test が落ちる
+- 場所: `crates/progest-core/src/index/migrations/0001_initial.sql`、検証は integration test `opening_an_existing_database_does_not_reapply_migrations`
+
+### rusqlite の `row.get::<_, String>(...)` が `owned String` を返すが後で `&str` だけ使う場合
+- clippy の `needless_pass_by_value` が厳しく、ヘルパ関数に `String` を渡して `.parse()` だけ呼ぶと拒否される
+- 対処: `row.get::<_, String>()` で一度受けてから `&str` で下流ヘルパに渡す（`as_deref()` 等）
+- `Option<String>` は `.as_deref()` で `Option<&str>` に変換してから `.map(str::parse::<...>).transpose()?` で parse
+
+### SQL 文を埋め込む時は `const &str` に切り出す
+- rustfmt は長いリテラル SQL の内側には手を入れないが、行数が嵩むと関数本体の他ロジックが読みにくくなる
+- 複数の SELECT で同じカラム順を使い回すなら `const SELECT_COLUMNS: &str = "..."` に切り出して `format!("SELECT {SELECT_COLUMNS} FROM ...")` で合成すると、スキーマ変更時の更新箇所が 1 個所になる
+
+---
+
+## 6. core::reconcile
+
+### Scanner は `.meta` も通常ファイルとして yield する
+- `.meta` はデフォルト `ignore` パターンに入っていない（むしろ git 同期対象なので入れてはいけない）
+- 結果 `core::fs::Scanner` は `foo.psd.meta` を普通の `ScanEntry { kind: File }` として yield する
+- reconcile 側で `path.as_str().ends_with(".meta")` を判定して、本体ファイル集合と sidecar 集合に分岐させる責務がある。orphan 検出はこの分岐を前提にする
+- 場所: `crates/progest-core/src/reconcile/reconciler.rs::is_sidecar`
+
+### `ignore::Walk` の出力順は FS 依存
+- macOS / Linux / Windows でディレクトリ読込順が異なり、scan 結果をそのまま `ScanReport.outcomes` に流すと test の assertion が flaky になる
+- 対処: reconcile 内で `path.as_str()` で sort してから outcome を積む。ordering を決定論にしておくと CLI 出力の diff も安定する
+- 場所: `crates/progest-core/src/reconcile/reconciler.rs::full_scan`
+
+---
+
+## 7. core::watch（notify / FSEvents）
+
+### macOS `TempDir` は非 canonical パス、FSEvents は canonical path を返す
+- `TempDir::new()` が返す `/var/folders/.../X` は `/private/var/folders/.../X` への symlink。`fs::canonicalize` でないと resolve されない
+- `notify` の FSEvents backend は **canonical path**（`/private/var/folders/...`）でイベントを発行する
+- 結果: watcher を TempDir の raw path で attach すると、受信した event path を `strip_prefix(root)` で相対化する段で全件 drop されテストが 0 件 assertion で panic する
+- 対処: `Watcher::start` 内で `fs::canonicalize(&root).unwrap_or(root)` で正規化、`IgnoreRules` も正規化後の root を基準に作り直す
+- 場所: `crates/progest-core/src/watch/watcher.rs::Watcher::start_with_debounce`
+
+### `notify-debouncer-full` + `std::sync::mpsc` 構成での Drop 順序
+- 典型構造: `Watcher { debouncer, worker: JoinHandle }`。worker は `raw_rx.recv()` で blocking、`raw_tx` を閉じるのは debouncer の Drop
+- `Drop::drop` で worker を先に join しようとすると、自スレッドが debouncer を手放さないまま worker が待ち続け **deadlock** する
+- 対処: debouncer を `Option` で包み `take()` → `drop` してから worker を join する。field declaration 順序に頼ると manual `Drop::drop` の前に drop されないので、明示的に take する必要あり
+- 場所: `crates/progest-core/src/watch/watcher.rs::Watcher::drop`
+
+### macOS FSEvents の `Remove` は Modify に縮退しやすい
+- `fs::write(p, ..)` → `fs::remove_file(p)` を数十 ms 間隔で走らせると、FSEvents は 2 件の `Modify(Data)` としてまとめがち。notify の分類も Modify になり、Remove にならない
+- テスト側で「Remove event が来る」まで厳密に待つと flaky になる。Reconcile 側の `apply_changes` は「Modified 来たが FS に無い」を「index row 削除」にフォールバックする挙動があるので、watcher 単体テストでは「削除対象パスに関する event が 1 件以上届く」までに留める
+- 場所: `crates/progest-core/tests/watch_flow.rs::removing_a_file_surfaces_an_event_for_that_path`
+
+---
+
+## 8. core::project / CLI / init
+
+### `progest init` の `.gitignore` 追記は trailing slash を正規化する
+- `.progest/thumbs` と `.progest/thumbs/` は gitignore semantics では同一
+- 既存 `.gitignore` が slash なし、shipped pattern が slash 付きだと、単純 string 比較で重複追記が起きる
+- 対処: 両方を `trim_end_matches('/')` で正規化してから `HashSet` 比較
+- 場所: `crates/progest-core/src/project/layout.rs::ensure_gitignore`
+
+### `project::initialize` は `.gitignore` を 1 件作るので scan 件数が +1 になる
+- 10k fixture を作ってベンチを走らせると `added` が 10001 になる
+- 理由: `initialize` が project root 直下に `.gitignore` を書き込むため、scanner から見るとそれも tracked file
+- ベンチ assertion は `>=` 比較にしておくと安全。テストで exact count を assert したい場合は fixture 用意 → `initialize` の順ではなく、`initialize` → fixture の順にして `.gitignore` を先に取り込むか、明示的に +1 を吸収する
+- 場所: `crates/progest-core/benches/scan.rs::prepare_project`
+
+---
+
+## 9. core::meta pending / StdMetaStore 挙動
+
+### `StdMetaStore` の暗黙 flush は best-effort、エラーは握りつぶす
+- pending queue の flush は load / save / delete の先頭で毎回走る。ただし flush 自身が失敗しても呼び出し元のメイン操作は続行する
+- 理由: flush が失敗する原因（FS 不調、書込権限など）は大抵キューに入った原因と同じで、この場でも治らない。メイン操作の結果（成功 or 同じ原因で失敗）を正しく返す方が有用
+- 逆にメインの save が失敗したらその場で enqueue してからエラーを返す。呼び出し元は `MetaStoreError::Fs(...)` を見て失敗を知り、ユーザーへの通知や再試行誘導ができる
+- 場所: `crates/progest-core/src/meta/store.rs::StdMetaStore::{run_flush, save}`
+
+---
+
+## 10. テスト / ベンチ基盤
+
+### `CARGO_BIN_EXE_<name>` で integration test から binary を叩く
+- binary crate の integration test（`tests/*.rs`）で Cargo は `env!("CARGO_BIN_EXE_<bin_name>")` をコンパイル時に埋め込む
+- `std::process::Command::new(env!("CARGO_BIN_EXE_progest"))` だけで `assert_cmd` 依存なしに end-to-end test が書ける
+- 場所: `crates/progest-cli/tests/cli_flow.rs::binary_path`
+
+### criterion の default は大型ワークロードに向かない
+- `sample_size = 100`, `measurement_time = 5s` がデフォルト。1 iteration が 100 ms の 10k scan でも ~50 s 以上かかる
+- 完了条件ベンチのような「1 回走って数字が欲しい」用途では `sample_size(10)` + `measurement_time(Duration::from_secs(30))` 程度にして 1 分以内に収める
+- 回帰検知を継続的にやる日が来たら数字を戻す
