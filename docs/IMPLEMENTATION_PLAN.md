@@ -10,15 +10,17 @@
 
 ## 0. 進捗スナップショット
 
-最終更新: 2026-04-22
+最終更新: 2026-04-23
 
 - **M0 Skeleton**: 完了
 - **M1 Core data layer**: 完了 — `core::fs` / `core::identity` / `core::meta` / `core::index` / `core::reconcile` / `core::watch` / `core::project` + CLI `init`/`scan`/`doctor` + 10k-file incremental scan ベンチ（実測 ~82 ms、5 s gate の 60 倍下回り）
 - **M2 Naming rules engine + accepts**: 進行中
   - [x] `core::meta` 残タスク（pending queue / `.dirmeta.toml` loader）
-  - [ ] `core::rules` — DSL パーサ → eval → template（次着手）
-  - [ ] `core::accepts` / `core::history` / `core::rename`
+  - [x] DSL 仕様書 `docs/NAMING_RULES_DSL.md`
+  - [x] `core::rules` — loader / applies_to / template / constraint / inheritance / evaluate + trace、§10 golden + Codex 指摘 5 件のホットフィックス + regression golden（feat/m2-core-rules）
+  - [ ] `core::accepts` / `core::history` / `core::rename`（次着手: `core::accepts`）
   - [ ] CLI `lint` / `rename` / `undo` / `redo`
+  - [ ] `core::rules` follow-up（suggested_names / §6 `{seq}` 採番 / trace の `NotApplicable` 拡張 / `match_basename` の Regex::new キャッシュ化 / §4.3 `{{`・§4.4 mixed spec 等の golden 追加）— 別 issue で管理
 - **M3 以降**: 未着手
 
 後続 PR に切り出した既完了モジュールの残タスク:

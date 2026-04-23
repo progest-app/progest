@@ -43,6 +43,11 @@ rusqlite = { version = "0.32", features = ["bundled"] }
 notify = "8"
 notify-debouncer-full = "0.6"
 criterion = "0.5"
+globset = "0.4"
+regex = "1"
+unicode-segmentation = "1"
+unicode-normalization = "0.1"
+serde_yaml = "0.9"
 
 [profile.release]
 lto = "thin"
