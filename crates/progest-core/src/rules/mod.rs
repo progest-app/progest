@@ -14,6 +14,7 @@
 
 pub mod applies_to;
 pub mod constraint;
+pub mod eval;
 pub mod inheritance;
 pub mod loader;
 pub mod template;
@@ -24,6 +25,7 @@ pub use constraint::{
     BUILTIN_COMPOUND_EXTS, CompiledConstraint, ConstraintCompileError, ConstraintFailure,
     compile_constraint, evaluate_constraint, split_basename,
 };
+pub use eval::{EvaluationOutcome, evaluate};
 pub use inheritance::{
     CompiledRule, CompiledRuleBody, CompiledRuleSet, InheritanceError, RuleProvenance,
     RuleSetLayer, compile_ruleset,
