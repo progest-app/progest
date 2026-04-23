@@ -26,7 +26,9 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::fs::{FileSystem, ProjectPath, ProjectPathError};
-use crate::naming::{FillMode, NameCandidate, UnresolvedHoleError, resolve};
+use crate::naming::{
+    FillMode, HolePrompter, NameCandidate, UnresolvedHoleError, resolve, resolve_with_prompter,
+};
 
 use super::ops::{Conflict, ConflictKind, RenameOp};
 
@@ -136,6 +138,30 @@ pub fn build_preview(
     fill_mode: &FillMode,
     fs: &dyn FileSystem,
 ) -> Result<RenamePreview, PreviewError> {
+    build_preview_inner(requests, fill_mode, None, fs)
+}
+
+/// Like [`build_preview`] but resolves holes through `prompter`
+/// instead of returning [`ConflictKind::Unresolved`]. Equivalent to
+/// running with [`FillMode::Prompt`] but with a real interactive
+/// resolver hooked in.
+///
+/// # Errors
+/// See [`PreviewError`].
+pub fn build_preview_with_prompter(
+    requests: &[RenameRequest],
+    prompter: &dyn HolePrompter,
+    fs: &dyn FileSystem,
+) -> Result<RenamePreview, PreviewError> {
+    build_preview_inner(requests, &FillMode::Prompt, Some(prompter), fs)
+}
+
+fn build_preview_inner(
+    requests: &[RenameRequest],
+    fill_mode: &FillMode,
+    prompter: Option<&dyn HolePrompter>,
+    fs: &dyn FileSystem,
+) -> Result<RenamePreview, PreviewError> {
     let mut ops: Vec<RenameOp> = Vec::with_capacity(requests.len());
 
     for req in requests {
@@ -144,7 +170,11 @@ pub fn build_preview(
         }
         let parent = req.from.parent().expect("non-root path has a parent");
 
-        let (to, mut conflicts) = match resolve(&req.candidate, fill_mode) {
+        let resolution = match (fill_mode, prompter) {
+            (FillMode::Prompt, Some(p)) => resolve_with_prompter(&req.candidate, p),
+            _ => resolve(&req.candidate, fill_mode),
+        };
+        let (to, mut conflicts) = match resolution {
             Ok(resolution) => {
                 let to = parent.join(&resolution.basename)?;
                 (to, Vec::new())
@@ -188,6 +218,9 @@ fn unresolved_conflict(err: &UnresolvedHoleError) -> Conflict {
         UnresolvedHoleError::PromptUnavailable => {
             "FillMode::Prompt requires an interactive resolver; not available in this context"
                 .to_string()
+        }
+        UnresolvedHoleError::PrompterFailed { origin, reason } => {
+            format!("interactive resolver failed for '{origin}': {reason}")
         }
     };
     Conflict {
@@ -437,6 +470,28 @@ mod tests {
         let req = RenameRequest::new(ProjectPath::root(), literal_candidate("x", "psd"));
         let err = build_preview(&[req], &FillMode::Skip, &fs).unwrap_err();
         assert!(matches!(err, PreviewError::RootSource));
+    }
+
+    struct StubPrompter(String);
+    impl HolePrompter for StubPrompter {
+        fn prompt(
+            &self,
+            _: &crate::naming::types::Hole,
+        ) -> Result<String, crate::naming::PromptError> {
+            Ok(self.0.clone())
+        }
+    }
+
+    #[test]
+    fn build_preview_with_prompter_resolves_holes_into_target() {
+        let fs = MemFileSystem::new();
+        write(&fs, "x.png");
+        let req = RenameRequest::new(p("x.png"), hole_candidate());
+        let preview =
+            build_preview_with_prompter(&[req], &StubPrompter("scene".into()), &fs).unwrap();
+        let op = &preview.ops[0];
+        assert!(op.is_clean(), "prompter resolves holes: {op:?}");
+        assert_eq!(op.to.as_str(), "scene_v01.png");
     }
 
     #[test]

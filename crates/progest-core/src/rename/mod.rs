@@ -19,4 +19,6 @@ pub use apply::{
     StageStep,
 };
 pub use ops::{Conflict, ConflictKind, RenameOp};
-pub use preview::{PreviewError, RenamePreview, RenameRequest, build_preview};
+pub use preview::{
+    PreviewError, RenamePreview, RenameRequest, build_preview, build_preview_with_prompter,
+};

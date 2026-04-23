@@ -15,6 +15,7 @@ use clap::{Parser, Subcommand};
 use commands::clean::{CaseFlag, CleanArgs, FillFlag, FormatFlag};
 
 mod commands;
+mod prompter;
 
 /// Naming-rule-first file management for creative projects.
 #[derive(Debug, Parser)]
