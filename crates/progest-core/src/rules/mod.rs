@@ -14,12 +14,18 @@
 
 pub mod applies_to;
 pub mod loader;
+pub mod template;
 pub mod types;
 
 pub use applies_to::{AppliesToError, CompiledAppliesTo, CompiledPattern, compute_specificity};
 pub use loader::{
     AppliesToRaw, LoadError, LoadWarning, RULES_SCHEMA_VERSION, RawConstraintBody, RawRule,
     RawRuleBody, RawTemplateBody, RulesDocument, load_document,
+};
+pub use template::{
+    Atom, CompiledTemplate, DateFormat, DateToken, DynamicAtom, DynamicSource, EvaluationError,
+    FormatSpec, StaticAtom, StaticKind, TemplateError, TemplateMatch, compile as compile_template,
+    match_basename,
 };
 pub use types::{
     Casing, Category, Charset, Decision, Mode, RuleHit, RuleId, RuleIdError, RuleKind, RuleSource,
