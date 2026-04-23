@@ -3025,6 +3025,8 @@ dependencies = [
  "anyhow",
  "clap",
  "progest-core",
+ "serde",
+ "serde_json",
  "tempfile",
  "tracing",
  "tracing-subscriber",
