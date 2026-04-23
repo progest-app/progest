@@ -12,9 +12,14 @@
 //! matcher, template parser, constraint evaluator, inheritance
 //! resolver, and the top-level `evaluate` entry point.
 
+pub mod loader;
 pub mod types;
 
+pub use loader::{
+    AppliesToRaw, LoadError, LoadWarning, RULES_SCHEMA_VERSION, RawConstraintBody, RawRule,
+    RawRuleBody, RawTemplateBody, RulesDocument, load_document,
+};
 pub use types::{
-    Category, Decision, Mode, RuleHit, RuleId, RuleIdError, RuleKind, RuleSource, Severity,
-    SpecificityScore, Violation,
+    Casing, Category, Charset, Decision, Mode, RuleHit, RuleId, RuleIdError, RuleKind, RuleSource,
+    Severity, SpecificityScore, Violation,
 };

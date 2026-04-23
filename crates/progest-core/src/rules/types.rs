@@ -159,6 +159,30 @@ pub enum Category {
     Placement,
 }
 
+// --- Constraint field vocab (§5.3 / §5.4) ----------------------------------
+
+/// Allowed character class for constraint rules (§5.3).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Charset {
+    Ascii,
+    #[default]
+    Utf8,
+    NoCjk,
+}
+
+/// Permitted casing for basename-minus-extension (§5.4).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Casing {
+    #[default]
+    Any,
+    Snake,
+    Kebab,
+    Camel,
+    Pascal,
+}
+
 // --- Specificity / Source / Decision / Trace (§7.4, §9.2) ------------------
 
 /// Specificity score ordered by `(literal_segments, literal_chars)`.
@@ -331,6 +355,26 @@ mod tests {
         assert!(Severity::EvaluationError.fails_ci());
         assert!(!Severity::Warn.fails_ci());
         assert!(!Severity::Hint.fails_ci());
+    }
+
+    #[test]
+    fn charset_default_is_utf8() {
+        assert_eq!(Charset::default(), Charset::Utf8);
+    }
+
+    #[test]
+    fn casing_default_is_any() {
+        assert_eq!(Casing::default(), Casing::Any);
+    }
+
+    #[test]
+    fn charset_serde_uses_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&Charset::NoCjk).unwrap(),
+            "\"no_cjk\""
+        );
+        let parsed: Charset = serde_json::from_str("\"ascii\"").unwrap();
+        assert_eq!(parsed, Charset::Ascii);
     }
 
     // --- SpecificityScore ordering -----------------------------------------
