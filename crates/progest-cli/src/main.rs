@@ -40,7 +40,7 @@ enum Command {
     Doctor,
     /// Check files against naming rules.
     Lint,
-    /// Preview mechanical name-cleanup candidates (REQUIREMENTS §3.5.5).
+    /// Preview or apply mechanical name-cleanup candidates (REQUIREMENTS §3.5.5).
     Clean {
         /// Restrict the walk to these paths (project-root relative or absolute).
         #[arg(value_name = "PATH")]
@@ -63,6 +63,10 @@ enum Command {
         /// Placeholder string substituted for each hole under `--fill-mode=placeholder`.
         #[arg(long)]
         placeholder: Option<String>,
+        /// After previewing, commit the changed-and-resolvable candidates
+        /// through the same atomic apply path as `progest rename`.
+        #[arg(long)]
+        apply: bool,
     },
     /// Preview or apply renames against the project (M2).
     Rename {
@@ -127,8 +131,9 @@ fn main() -> Result<ExitCode> {
             strip_suffix,
             fill_mode,
             placeholder,
+            apply,
         } => {
-            commands::clean::run(
+            let code = commands::clean::run(
                 &cwd,
                 &CleanArgs {
                     paths,
@@ -138,9 +143,14 @@ fn main() -> Result<ExitCode> {
                     strip_suffix,
                     fill_mode,
                     placeholder,
+                    apply,
                 },
             )?;
-            Ok(ExitCode::SUCCESS)
+            Ok(if code == 0 {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(u8::try_from(code).unwrap_or(1))
+            })
         }
         Command::Rename {
             paths,
