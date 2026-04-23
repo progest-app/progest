@@ -25,10 +25,12 @@ pub mod case;
 pub mod fill;
 pub mod loader;
 pub mod pipeline;
+pub mod suggest;
 pub mod types;
 
 pub use case::{CaseConvertError, convert_case};
 pub use fill::{FillMode, FillResolution, UnresolvedHoleError, resolve};
 pub use loader::{CleanupConfigError, CleanupConfigWarning, extract_cleanup_config};
 pub use pipeline::clean_basename;
+pub use suggest::fill_suggested_names;
 pub use types::{CaseStyle, CleanupConfig, Hole, HoleKind, NameCandidate, Segment};
