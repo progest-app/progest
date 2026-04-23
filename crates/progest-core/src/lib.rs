@@ -9,6 +9,7 @@
 //! the existing [`fs`], [`identity`], [`meta`], [`index`], [`reconcile`],
 //! and [`watch`] modules.
 
+pub mod accepts;
 pub mod fs;
 pub mod identity;
 pub mod index;
