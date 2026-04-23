@@ -167,6 +167,7 @@ pub fn evaluate(
                     reason,
                     trace: Vec::new(), // filled by the caller if it wants detail
                     suggested_names: Vec::new(),
+                    placement_details: None,
                 });
             }
         }
@@ -278,6 +279,7 @@ fn evaluate_template_winner(
                     reason,
                     trace: Vec::new(),
                     suggested_names: Vec::new(),
+                    placement_details: None,
                 });
             }
         }
@@ -291,6 +293,7 @@ fn evaluate_template_winner(
             reason: err.to_string(),
             trace: Vec::new(),
             suggested_names: Vec::new(),
+            placement_details: None,
         }),
     }
 

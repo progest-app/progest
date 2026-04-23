@@ -40,6 +40,6 @@ pub use template::{
     match_basename,
 };
 pub use types::{
-    Casing, Category, Charset, Decision, Mode, RuleHit, RuleId, RuleIdError, RuleKind, RuleSource,
-    Severity, SpecificityScore, Violation,
+    AcceptsSource, Casing, Category, Charset, Decision, Mode, PlacementDetails, RuleHit, RuleId,
+    RuleIdError, RuleKind, RuleSource, Severity, SpecificityScore, Violation,
 };

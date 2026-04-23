@@ -267,6 +267,46 @@ pub struct Violation {
     pub trace: Vec<RuleHit>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suggested_names: Vec<String>,
+    /// Placement-specific payload (§3.13.6). Populated only when
+    /// `category == Placement`; `None` for naming violations.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub placement_details: Option<PlacementDetails>,
+}
+
+/// Fields required by REQUIREMENTS.md §3.13.6 for `category =
+/// "placement"` violations. Kept optional on [`Violation`] so naming
+/// rules don't have to carry empty data.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PlacementDetails {
+    /// Extensions the parent directory accepts (alias-expanded,
+    /// normalized to lowercase without leading dot). Empty means the
+    /// directory has no `[accepts]` and the violation is purely
+    /// advisory — placement lint should not emit in that case, so an
+    /// empty vector here is a code smell.
+    pub expected_exts: Vec<String>,
+    /// Whether the accepting dir won by declaring the allowed set
+    /// itself or by inheriting from an ancestor.
+    pub winning_rule_source: AcceptsSource,
+    /// Ranked destination candidates. Reserved for the
+    /// import-ranking pass in a follow-up PR; left empty by the
+    /// initial placement lint. Ranking order (top priority first):
+    /// own-set match, then inherited match, then MRU, then shallow
+    /// path depth.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggested_destinations: Vec<ProjectPath>,
+}
+
+/// Where the `effective_accepts` set that rejected a file came from.
+///
+/// Separate from [`RuleSource`]: naming rules cascade through
+/// project-wide + dirmeta layers, but accepts only distinguishes
+/// "declared on this dir" vs "inherited from an ancestor" per
+/// REQUIREMENTS.md §3.13.2.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AcceptsSource {
+    Own,
+    Inherited,
 }
 
 #[cfg(test)]
@@ -452,6 +492,7 @@ mod tests {
                 explanation: "only template rule that matched".into(),
             }],
             suggested_names: vec!["ch010_001_bg_forest_v03.psd".into()],
+            placement_details: None,
         };
 
         let yaml = serde_yaml::to_string(&v).unwrap();
