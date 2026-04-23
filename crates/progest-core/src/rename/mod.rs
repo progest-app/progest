@@ -10,8 +10,12 @@
 //! wiring with `group_id`, and sequence-aware bulk rename land in
 //! follow-up commits on this branch.
 
+pub mod apply;
 pub mod ops;
 pub mod preview;
 
+pub use apply::{
+    AppliedOp, ApplyError, ApplyOutcome, IndexWarning, Rename, STAGING_PREFIX, StageStep,
+};
 pub use ops::{Conflict, ConflictKind, RenameOp};
 pub use preview::{PreviewError, RenamePreview, RenameRequest, build_preview};
