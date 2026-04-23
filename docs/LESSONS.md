@@ -233,3 +233,44 @@
 - `sample_size = 100`, `measurement_time = 5s` がデフォルト。1 iteration が 100 ms の 10k scan でも ~50 s 以上かかる
 - 完了条件ベンチのような「1 回走って数字が欲しい」用途では `sample_size(10)` + `measurement_time(Duration::from_secs(30))` 程度にして 1 分以内に収める
 - 回帰検知を継続的にやる日が来たら数字を戻す
+
+---
+
+## 11. core::rules（DSL evaluator / parser）
+
+### `schema_version > N` の forward-compat は「未知ルールを捨てる」ではなく「既知ルールをパース + 未知キーを extra 保持」
+- 最初の実装は newer schema で `rules: Vec::new()` を返していた → v1 バイナリが v2 rules.toml を読むと命名規則が全部スキップされ、lint が silently pass する
+- 正しい挙動: known shape でパースし、未知の top-level / rule キーは `extra: Table` に格納、warning は出さない
+- 同 schema_version の時のみ typo 候補として warning 化する
+- 場所: `crates/progest-core/src/rules/loader.rs::load_document`
+
+### `{ext}` は構造的分離が必要、greedy regex だけで扱うと compound ext が曖昧
+- 当初実装は `{ext}` を `[A-Za-z0-9.]+` の regex fragment にして全体 regex で捕獲 → `archive.tar.gz` を `(desc=archive.tar, ext=gz)` と `(desc=archive, ext=tar.gz)` のどちらにマッチするかが regex 依存（非決定）
+- 正解: `split_basename` で先にコンパウンドを剥がし、stem を非`{ext}`アトムから組んだ regex で照合、ext は別途 capture map に格納
+- `{ext}` 直前のリテラル `.` は split が食べているので stem regex 側では trim する必要あり
+- 場所: `crates/progest-core/src/rules/template.rs::match_basename`
+
+### `required_prefix` / `required_suffix` は stem に当てる。basename 全体だと拡張子を跨ぐ
+- `required_prefix = "foo."` を basename で照合すると `foo.psd` が通ってしまう（`"foo.psd".starts_with("foo.")` = true）
+- suffix 側は元から stem で見ていたので、prefix 側だけズレていた。両方を stem に統一
+- 場所: `crates/progest-core/src/rules/constraint.rs::evaluate_constraint` の `required_prefix` 判定
+
+### §5.7 grapheme 数は NFC 後で数える
+- decomposed（`cafe\u{0301}` など）で入ってきた時、`graphemes(true)` は cluster を正しく 4 と返すが spec が NFC を明示しているので NFC 正規化を先に入れる
+- macOS APFS など decomposed を返す FS がある環境での挙動安定化にもなる
+- 依存: `unicode-normalization` crate
+- 場所: `crates/progest-core/src/rules/constraint.rs::grapheme_count`
+
+### full-replace override は scope 限定ではなく rule 単位のグローバル置換
+- child dirmeta で同 id+kind のルールが現れたら、parent rule は ruleset 全体から除去される
+- CSS cascade のように「child の scope 内だけ上書き」ではない
+- child の `applies_to` 外のパスには **どちらのルールも** 適用されなくなる点に注意（DSL §10.4 Case B 参照）
+- child scope 外で parent rule を残したい場合は別の rule_id を使う
+- 場所: `crates/progest-core/src/rules/inheritance.rs::compile_ruleset`
+
+### clippy pedantic の細かい罠（rules モジュールで踏んだ分）
+- `FormatSpec::is_numeric(self)` を `.any(FormatSpec::is_numeric)` に渡すと `fn(&Self)` 期待でコケる → `|s| s.is_numeric()` に展開
+- `if !cond { panic!(..) }` は `manual_assert` に引っかかる → `assert!(cond, ...)` に書き換え
+- テストで `Vec<&str>` を作るとき `.iter().copied().collect()` は `iter_cloned_collect` 警告 → `let compound: &[&str] = &["..."];` で済ませる
+- 関数引数が 7 を超えると `too_many_arguments` → 仕方ない場合は `#[allow(clippy::too_many_arguments)]` + 理由コメント
+- `format!` で push_string するパターンは `format_push_string` → `use std::fmt::Write; write!(out, "{...}")` または `expect("writing to String never fails")`

@@ -158,7 +158,7 @@ applies_to = "./assets/shots/ch???/**"
 | プレースホルダー | 参照元 | 例 |
 | --- | --- | --- |
 | `{field:<name>}` | `.meta` の `[custom].<name>` | `{field:scene:03d}` → `custom.scene = 20` なら `"020"` |
-| `{date:<fmt>}` | `.meta` の `[file].created_at` | `{date:YYYYMMDD}` → `"20260420"` |
+| `{date:<fmt>}` | `.meta` の `created_at`（トップレベルキー） | `{date:YYYYMMDD}` → `"20260420"` |
 
 参照プレースホルダーは **評価時に `.meta` を読み、整形後の literal 文字列に展開して比較する**（§4.6 参照）。generic regex としては扱わない。
 
@@ -249,12 +249,12 @@ applies_to = "./assets/shots/ch???/**"
 | `{version:02d}` / `{version:d}` | 同上 |
 | `{ext}` | `§4.8` に従い最長一致で決定後、小文字比較 |
 | `{field:<name>[:spec]}` | 評価時に `.meta.[custom].<name>` を読み、spec に従って整形し、**literal 文字列として比較**する |
-| `{date:<fmt>}` | 評価時に `.meta.[file].created_at` を読み、フォーマットトークンで整形し、**literal 文字列として比較**する |
+| `{date:<fmt>}` | 評価時に `.meta` のトップレベル `created_at` を読み、フォーマットトークンで整形し、**literal 文字列として比較**する |
 
 参照プレースホルダーの値取得に失敗したときは `template_mismatch` ではなく **`evaluation_error`** として扱う（§8.3 の severity にかかわらず必ず lint レポートに出力、lint の exit code には strict と同じ重みで影響）。失敗条件:
 - `.meta.[custom].<name>` が欠落
 - 型が spec と不整合（文字列 spec に int / 数値 spec に string 等）
-- `{date:}` に対応する `[file].created_at` が欠落 / パース不能
+- `{date:}` に対応する `created_at`（`.meta` トップレベル）が欠落 / パース不能
 - `{seq}` が spec の桁数に収まらない数値
 
 ### 4.7 open-ended placeholder の個数制限
@@ -695,10 +695,15 @@ expect:
 path:    ./assets/shots/ch010/ForestNight.psd
 expect:
   constraints:
-    project-default (rules.toml 版): casing=snake → violation
-  violations:
-    - rule_id: project-default (constraint, warn)
+    project-default: どこにも適用されない
+    ※ full replace は scope 限定ではなく、同 id+kind が child で上書きされた
+      時点で parent 側の rule は ruleset 全体から除去される。child の
+      `applies_to` が `./references/**` に正規化されているため、assets 配下の
+      このパスには project-default が一切適用されない。
+  violations: []
 ```
+
+full-replace は CSS cascade のような「局所 override」ではなく「rule 単位の置換」であり、kind 変更時は `override = true` を必須にすることで事故を防ぐ（§7.2）。child の scope 外で parent rule を残したい場合は **別の rule_id** を使って競合を避ける。
 
 ### 10.5 Specificity（Template winner 選定）
 
@@ -753,7 +758,7 @@ path C:  ./docs/memo.md                              → does not apply → not 
 - テンプレート文字列の regex コンパイルはロード時 1 回、以後キャッシュ
 - specificity score は glob の静的解析で求まるのでロード時計算
 - `{field:<name>}` / `{date:}` の値取得は評価時に `.meta` ロードと join
-- 全 DSL 仕様は **golden test suite** として `crates/progest-core/tests/rules_golden/` に、**入力 = `rules.toml` + fixture paths + per-file `custom` / `[file].created_at`**、**期待 = violations YAML** の形で固定する。YAML フォーマットは [IMPLEMENTATION_PLAN.md §5 M2](./IMPLEMENTATION_PLAN.md) の方針と一致させる
+- 全 DSL 仕様は **golden test suite** として `crates/progest-core/tests/rules_golden/` に、**入力 = `rules.toml` + fixture paths + per-file `custom` / トップレベル `created_at`**、**期待 = violations YAML** の形で固定する。YAML フォーマットは [IMPLEMENTATION_PLAN.md §5 M2](./IMPLEMENTATION_PLAN.md) の方針と一致させる
 - 仕様変更時は golden を更新し、その PR で本 docs と同期する
 
 ---
