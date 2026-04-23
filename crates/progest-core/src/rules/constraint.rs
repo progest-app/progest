@@ -18,6 +18,7 @@ use std::fmt;
 
 use regex::Regex;
 use thiserror::Error;
+use unicode_normalization::UnicodeNormalization;
 use unicode_segmentation::UnicodeSegmentation;
 
 use super::loader::RawConstraintBody;
@@ -360,7 +361,13 @@ fn basename_tokens(stem: &str) -> Vec<&str> {
 }
 
 fn grapheme_count(s: &str) -> u32 {
-    u32::try_from(s.graphemes(true).count()).unwrap_or(u32::MAX)
+    // Spec §5.7: count is on the NFC-normalized form, so a stem that
+    // arrived decomposed (e.g. "café" stored as "cafe\u{0301}") does
+    // not land on a different count than its composed sibling. The
+    // normalized string is short — allocating here is cheaper than
+    // reasoning about combining-mark boundaries elsewhere.
+    let normalized: String = s.nfc().collect();
+    u32::try_from(normalized.graphemes(true).count()).unwrap_or(u32::MAX)
 }
 
 fn is_printable_ascii(c: char) -> bool {
@@ -726,6 +733,25 @@ mod tests {
         r.max_length = 3;
         let c = compile_constraint(&r).unwrap();
         assert!(evaluate_constraint(&c, "日本語", &[]).is_empty());
+    }
+
+    #[test]
+    fn length_counts_nfc_form_not_decomposed() {
+        // "café" decomposed: "cafe" + U+0301 COMBINING ACUTE ACCENT.
+        // NFC-normalized that collapses to 4 graphemes ("café"), which
+        // is what spec §5.7 requires. Without NFC the raw string is
+        // still 4 clusters under `graphemes(true)` (combining mark
+        // attaches to "e"), but the decomposed form can still trip
+        // naïve byte- or char-count paths — we use this assertion to
+        // lock in the NFC step.
+        let mut r = default_raw();
+        r.max_length = 4;
+        let c = compile_constraint(&r).unwrap();
+        let decomposed = "cafe\u{0301}";
+        assert!(
+            evaluate_constraint(&c, decomposed, &[]).is_empty(),
+            "decomposed `{decomposed}` should count as 4 after NFC"
+        );
     }
 
     // --- prefix / suffix ---------------------------------------------------

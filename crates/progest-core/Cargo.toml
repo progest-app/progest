@@ -26,6 +26,7 @@ notify-debouncer-full.workspace = true
 globset.workspace = true
 regex.workspace = true
 unicode-segmentation.workspace = true
+unicode-normalization.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
