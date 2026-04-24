@@ -476,3 +476,39 @@
 - 解決: `from == to` の op は apply 前に filter で除外（Identity / Unresolved fallback to from の両方をカバー）。残ったものだけ cleanness check に掛ける
 - preview report は filter 前のものを emit するので、ユーザーは何が起きるか/起きないかを両方見られる
 - 場所: `crates/progest-cli/src/commands/clean.rs::commit`
+
+---
+
+## 16. core::lint / core::sequence::drift / undo-redo CLI
+
+### `Rename::apply` は常に history へ append する前提だった → `Option` 化が必要
+- `progest undo` / `redo` で inverse を replay するとき、**history には既に original entry があり、それを flip するだけでよい**。`Rename::apply` がそのまま append してしまうと「undo で 2 件目の entry が足され、redo が意味を失う」という二重記帳になる
+- 解決: `Rename::new_without_history(fs, index)` コンストラクタを追加し、`history: Option<&dyn Store>` に変更。apply ループ内で `if let Some(history)` ガード
+- 使い分け: `progest rename` / `clean --apply` は `Rename::new(fs, index, history)`、`progest undo` / `redo` は `Rename::new_without_history(fs, index)` + 別途 `Store::undo/redo` を呼ぶ
+- 場所: `crates/progest-core/src/rename/apply.rs`, `crates/progest-cli/src/commands/undo.rs`
+
+### undo の order-of-operations — replay → flip
+- `Store::undo()` は副作用込み（consumed flip + pointer 遷移）なので、「先に flip してから replay」だと replay 失敗時に history と disk が乖離する
+- 解決: まず `Store::head()` で peek（read-only）、FS replay（`Rename::apply_without_history`）、成功したら `Store::undo()` で flip
+- group 単位 undo の場合: `Store::list()` で group の全 entry を取得 → head から順に同じパターン（replay → flip）を繰り返す。途中で失敗しても前半は既に flip 済みなので、次回実行で残り分から再開できる
+- 場所: `crates/progest-cli/src/commands/undo.rs::run`
+
+### `MemFileSystem` は `Clone` ではない → `StdMetaStore::new(fs)` が消費した後も fs reference が必要なら `.filesystem()` 経由で戻す
+- テストで `fs` と `meta_store` を両方引数に渡したくなる場面が多いが、`StdMetaStore::new(fs: F)` が fs を move で取るので単純には書けない
+- 解決: fs をまず `MetaStore` に渡し、必要な場所では `store.filesystem()` で `&F` を取り出す。テスト helper として `store_with(files) -> StdMetaStore<MemFileSystem>` を置くのが読みやすい
+- 場所: `crates/progest-core/src/lint/orchestrator.rs::tests::store_with`
+
+### `applies_to` グロブは `./` 必須（spec §3.1）
+- lint の smoke で `applies_to = "assets/**/*.psd"` と書いたら `MissingLeadingDotSlash` で落ちる
+- 解決: 必ず `"./assets/**/*.psd"` と書く（project root 相対の明示）
+- 場所: `docs/NAMING_RULES_DSL.md §3.1` と `crates/progest-core/src/rules/applies_to.rs`
+
+### sequence drift の majority canonical は `max_by` の比較向き
+- `max_by(|a, b| ...)` は `Less` で b を採用 / `Greater` で a を保持。アルファベット小さい方を勝たせたいとき、**単純に `a.stem.cmp(&b.stem)` を追加すると逆向き**（辞書順で大きい方が勝つ）
+- 解決: tie-break で `b.stem_prefix.cmp(&a.stem_prefix)` と書く（または `a.cmp(&b).reverse()`）。テストで `"Shot"` が `"shot"` に勝つことを確認
+- 場所: `crates/progest-core/src/sequence/drift.rs::detect_drift`
+
+### clippy pedantic: `too_many_lines` (100 行上限) は main.rs の match で引っかかる
+- `fn main()` がサブコマンド dispatch で 108 行に膨らみ clippy-deny
+- 解決: 共通 helper（例: `to_exit_code(i32) -> ExitCode`）を抽出。それでも 100 行超えるなら `#[allow(clippy::too_many_lines)]` を main に付ける（巨大 match は意味的にまとまっているので分割しないほうが読みやすい）
+- 場所: `crates/progest-cli/src/main.rs`
