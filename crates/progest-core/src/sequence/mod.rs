@@ -34,7 +34,9 @@
 //! VFX pipelines.
 
 pub mod detect;
+pub mod drift;
 pub mod types;
 
 pub use detect::{MIN_MEMBERS, detect_sequences};
+pub use drift::{DriftReason, DriftShape, DriftViolation, detect_drift};
 pub use types::{Sequence, SequenceDetection, SequenceMember};

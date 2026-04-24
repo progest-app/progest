@@ -14,6 +14,7 @@ pub mod fs;
 pub mod history;
 pub mod identity;
 pub mod index;
+pub mod lint;
 pub mod meta;
 pub mod naming;
 pub mod project;

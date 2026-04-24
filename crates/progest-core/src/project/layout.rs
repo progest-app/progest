@@ -21,6 +21,14 @@ pub const DOT_DIR: &str = ".progest";
 /// Name of the shared project-level TOML file.
 pub const PROJECT_TOML_FILENAME: &str = "project.toml";
 
+/// Name of the naming-rules TOML file (optional; absent means "no
+/// project-wide rules, only per-dir `.dirmeta.toml` `[[rules]]`").
+pub const RULES_TOML_FILENAME: &str = "rules.toml";
+
+/// Name of the alias / extension-compounds TOML file (optional;
+/// absent means "use the builtin alias catalog only").
+pub const SCHEMA_TOML_FILENAME: &str = "schema.toml";
+
 /// Name of the user-editable ignore rules file (gitignore syntax).
 pub const USER_IGNORE_FILENAME: &str = "ignore";
 

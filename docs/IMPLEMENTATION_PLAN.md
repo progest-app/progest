@@ -14,7 +14,7 @@
 
 - **M0 Skeleton**: 完了
 - **M1 Core data layer**: 完了 — `core::fs` / `core::identity` / `core::meta` / `core::index` / `core::reconcile` / `core::watch` / `core::project` + CLI `init`/`scan`/`doctor` + 10k-file incremental scan ベンチ（実測 ~82 ms、5 s gate の 60 倍下回り）
-- **M2 Naming rules engine + accepts**: 進行中
+- **M2 Naming rules engine + accepts**: 完了
   - [x] `core::meta` 残タスク（pending queue / `.dirmeta.toml` loader）
   - [x] DSL 仕様書 `docs/NAMING_RULES_DSL.md`
   - [x] `core::rules` — loader / applies_to / template / constraint / inheritance / evaluate + trace、§10 golden + Codex 指摘 5 件のホットフィックス + regression golden（feat/m2-core-rules）
@@ -25,11 +25,16 @@
   - [x] `core::sequence` — 同 parent + stem prefix + separator + padding + extension で group、min 2 members、gap 許容、決定的出力。`requests_from_sequence(seq, new_stem)` で stem 置換 RenameRequest 生成（`seq-{uuid}` group_id 共有）、CLI `progest rename --sequence-stem`（feat/m2-core-rename）
   - [x] `naming::HolePrompter` trait + `PromptError` + `resolve_with_prompter`、`StdinHolePrompter`（CLI 側、stderr へ prompt / stdout JSON 維持）、`build_preview_with_prompter` で `FillMode::Prompt` 実装（feat/m2-core-rename）
   - [x] CLI `rename` / `clean --apply`（path 引数 + lint 結果 stdin パイプ両対応、`--mode preview|apply`、`--format text|json`、`--fill-mode skip|placeholder|prompt`、`--sequence-stem STEM`）（feat/m2-core-rename）
-  - [ ] CLI `lint` / `undo` / `redo`
+  - [x] `core::sequence::drift` — 同 parent + 正規化 stem + ext で sequence を group、majority canonical、separator / padding / stem-case / combined reason 分類、`DriftViolation` + pre-rendered `suggested_name`。`Category::Sequence` 追加（feat/m2-cli-lint-undo-redo）
+  - [x] `core::lint` orchestrator — `lint_paths(fs, meta_store, paths, opts)` で rules + accepts + drift を 1 パス集約、dirmeta chain per-parent cache、`explain=false` で非 Winner trace trim、naming のみ `fill_suggested_names` 充填、grouped `LintReport {naming, placement, sequence, summary}`（feat/m2-cli-lint-undo-redo）
+  - [x] CLI `progest lint` — `[PATH]...` / `--format text|json` / `--explain` / exit code DSL §8.2（strict / evaluation_error で 1）、`rules.toml` / `schema.toml` optional、`ProjectRoot::{rules_toml,schema_toml}()` accessor 追加、6 smoke test（feat/m2-cli-lint-undo-redo）
+  - [x] `progest clean` sequence-aware preview — `detect_sequences` を walker 結果に走らせ、各 member に `seq-{uuid}` 割当、JSON `sequence_group` / text `[seq-...]` / apply 時は `RenameRequest.group_id` に流して history batch 共有、2 新規 smoke test（feat/m2-cli-lint-undo-redo）
+  - [x] CLI `progest undo` / `progest redo` — default で head (undo) / next-consumed (redo) の同 group contiguous entry を driver で replay、`--entry` で 1 件のみ。`Rename::new_without_history` 新設で FS+index だけ replay（history は `Store::undo/redo` で consumed flip）、tag/meta_edit/import は `not yet wired` エラーで明示停止、5 smoke test（feat/m2-cli-lint-undo-redo）
   - [ ] `core::rules` follow-up（suggested_names / §6 `{seq}` 採番 / trace の `NotApplicable` 拡張 / `match_basename` の Regex::new キャッシュ化 / §4.3 `{{`・§4.4 mixed spec 等の golden 追加）— 別 issue で管理
-  - [ ] `core::accepts` follow-up（import ランキング API / `suggested_destinations` 充填 / `[extension_compounds]` loader）— 別 issue で管理
+  - [ ] `core::accepts` follow-up（import ランキング API / `suggested_destinations` 充填 / `[extension_compounds]` loader）— 別 issue で管理、M3 `core::import` 着手時に合流
   - [ ] `core::rename` follow-up（`progest doctor` で `.progest/local/staging/` の orphan 掃除 / 連番の renumber 操作 / `--from-stdin` でのバルク dry-run）— 別 issue で管理
-- **M3 以降**: 未着手
+  - [ ] `progest undo` / `redo` の tag_add / tag_remove / meta_edit / import 対応 — 各 op 発行側（M3 import 等）着手時に合流
+- **M3 以降**: 次着手。`core::import` + thumbnail + search + template + AI。M3 kickoff 向け sequence 統合設計メモは [`docs/M2_HANDOFF.md §5`](./M2_HANDOFF.md)
 
 後続 PR に切り出した既完了モジュールの残タスク:
 - `core::index`: FTS5 virtual table（M3 search）/ `custom_fields` テーブル（M2 rules と同時可）

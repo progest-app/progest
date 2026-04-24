@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use super::document::ProjectError;
 use super::layout::{
     DOT_DIR, HISTORY_DB_FILENAME, INDEX_DB_FILENAME, LOCAL_DIR, PROJECT_TOML_FILENAME,
-    USER_IGNORE_FILENAME,
+    RULES_TOML_FILENAME, SCHEMA_TOML_FILENAME, USER_IGNORE_FILENAME,
 };
 
 /// Absolute path to a discovered project root.
@@ -88,6 +88,24 @@ impl ProjectRoot {
     #[must_use]
     pub fn history_db(&self) -> PathBuf {
         self.dot_dir().join(LOCAL_DIR).join(HISTORY_DB_FILENAME)
+    }
+
+    /// Absolute path of `.progest/rules.toml`.
+    ///
+    /// The file is optional — callers that don't find it on disk must
+    /// fall back to an empty ruleset, not error.
+    #[must_use]
+    pub fn rules_toml(&self) -> PathBuf {
+        self.dot_dir().join(RULES_TOML_FILENAME)
+    }
+
+    /// Absolute path of `.progest/schema.toml`.
+    ///
+    /// Optional: absent means "use the builtin alias catalog and no
+    /// project-defined `[extension_compounds]`".
+    #[must_use]
+    pub fn schema_toml(&self) -> PathBuf {
+        self.dot_dir().join(SCHEMA_TOML_FILENAME)
     }
 }
 

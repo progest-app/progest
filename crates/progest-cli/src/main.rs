@@ -4,7 +4,7 @@
 //! should be backed by a `progest-core` API with identical behaviour.
 //! See `docs/REQUIREMENTS.md` §3.9 for the full command surface.
 
-#![allow(clippy::todo)] // scaffold: Lint/Search populated in M2/M3.
+#![allow(clippy::todo)] // scaffold: Search populated in M3.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -13,7 +13,9 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use commands::clean::{CaseFlag, CleanArgs, FillFlag, FormatFlag};
+use commands::lint::{FormatFlag as LintFormat, LintArgs};
 use commands::rename::{RenameArgs, RenameMode};
+use commands::undo::{Direction as UndoDirection, FormatFlag as UndoFormat, UndoRedoArgs};
 
 mod commands;
 mod prompter;
@@ -38,8 +40,20 @@ enum Command {
     Scan,
     /// Report integrity issues (orphan meta, UUID clashes, drift).
     Doctor,
-    /// Check files against naming rules.
-    Lint,
+    /// Check files against naming / placement / sequence rules and
+    /// report violations grouped by category.
+    Lint {
+        /// Restrict the walk to these paths (project-root relative or absolute).
+        #[arg(value_name = "PATH")]
+        paths: Vec<PathBuf>,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: LintFormat,
+        /// Keep rule traces for every evaluated file (not just
+        /// violating ones). Produces a much larger JSON payload.
+        #[arg(long)]
+        explain: bool,
+    },
     /// Preview or apply mechanical name-cleanup candidates (REQUIREMENTS §3.5.5).
     Clean {
         /// Restrict the walk to these paths (project-root relative or absolute).
@@ -108,8 +122,36 @@ enum Command {
         /// The query string (e.g. `tag:character type:psd is:violation`).
         query: String,
     },
+    /// Undo the top of the history stack. Default unwinds the whole
+    /// `group_id` (a bulk rename / sequence); `--entry` limits to one.
+    Undo {
+        /// Only undo the single top entry, even if it's part of a group.
+        #[arg(long)]
+        entry: bool,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: UndoFormat,
+    },
+    /// Redo the most recently undone entry or group.
+    Redo {
+        /// Only redo the single entry, even if it's part of a group.
+        #[arg(long)]
+        entry: bool,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: UndoFormat,
+    },
 }
 
+fn to_exit_code(code: i32) -> ExitCode {
+    if code == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(u8::try_from(code).unwrap_or(1))
+    }
+}
+
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<ExitCode> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -127,7 +169,21 @@ fn main() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Doctor => commands::doctor::run(&cwd),
-        Command::Lint => todo!("M2: rule engine lint report"),
+        Command::Lint {
+            paths,
+            format,
+            explain,
+        } => {
+            let code = commands::lint::run(
+                &cwd,
+                &LintArgs {
+                    paths,
+                    format,
+                    explain,
+                },
+            )?;
+            Ok(to_exit_code(code))
+        }
         Command::Clean {
             paths,
             format,
@@ -151,11 +207,7 @@ fn main() -> Result<ExitCode> {
                     apply,
                 },
             )?;
-            Ok(if code == 0 {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::from(u8::try_from(code).unwrap_or(1))
-            })
+            Ok(to_exit_code(code))
         }
         Command::Rename {
             paths,
@@ -184,12 +236,30 @@ fn main() -> Result<ExitCode> {
                     sequence_stem,
                 },
             )?;
-            Ok(if code == 0 {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::from(u8::try_from(code).unwrap_or(1))
-            })
+            Ok(to_exit_code(code))
         }
         Command::Search { query: _ } => todo!("M3: DSL parser + FTS5 query"),
+        Command::Undo { entry, format } => {
+            let code = commands::undo::run(
+                &cwd,
+                &UndoRedoArgs {
+                    entry_only: entry,
+                    format,
+                    direction: UndoDirection::Undo,
+                },
+            )?;
+            Ok(to_exit_code(code))
+        }
+        Command::Redo { entry, format } => {
+            let code = commands::undo::run(
+                &cwd,
+                &UndoRedoArgs {
+                    entry_only: entry,
+                    format,
+                    direction: UndoDirection::Redo,
+                },
+            )?;
+            Ok(to_exit_code(code))
+        }
     }
 }
