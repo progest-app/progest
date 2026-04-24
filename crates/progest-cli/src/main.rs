@@ -4,7 +4,7 @@
 //! should be backed by a `progest-core` API with identical behaviour.
 //! See `docs/REQUIREMENTS.md` §3.9 for the full command surface.
 
-#![allow(clippy::todo)] // scaffold: Lint/Search populated in M2/M3.
+#![allow(clippy::todo)] // scaffold: Search populated in M3.
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -13,6 +13,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 
 use commands::clean::{CaseFlag, CleanArgs, FillFlag, FormatFlag};
+use commands::lint::{FormatFlag as LintFormat, LintArgs};
 use commands::rename::{RenameArgs, RenameMode};
 
 mod commands;
@@ -38,8 +39,20 @@ enum Command {
     Scan,
     /// Report integrity issues (orphan meta, UUID clashes, drift).
     Doctor,
-    /// Check files against naming rules.
-    Lint,
+    /// Check files against naming / placement / sequence rules and
+    /// report violations grouped by category.
+    Lint {
+        /// Restrict the walk to these paths (project-root relative or absolute).
+        #[arg(value_name = "PATH")]
+        paths: Vec<PathBuf>,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: LintFormat,
+        /// Keep rule traces for every evaluated file (not just
+        /// violating ones). Produces a much larger JSON payload.
+        #[arg(long)]
+        explain: bool,
+    },
     /// Preview or apply mechanical name-cleanup candidates (REQUIREMENTS §3.5.5).
     Clean {
         /// Restrict the walk to these paths (project-root relative or absolute).
@@ -127,7 +140,25 @@ fn main() -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Doctor => commands::doctor::run(&cwd),
-        Command::Lint => todo!("M2: rule engine lint report"),
+        Command::Lint {
+            paths,
+            format,
+            explain,
+        } => {
+            let code = commands::lint::run(
+                &cwd,
+                &LintArgs {
+                    paths,
+                    format,
+                    explain,
+                },
+            )?;
+            Ok(if code == 0 {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(u8::try_from(code).unwrap_or(1))
+            })
+        }
         Command::Clean {
             paths,
             format,
