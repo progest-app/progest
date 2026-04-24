@@ -15,6 +15,7 @@ use clap::{Parser, Subcommand};
 use commands::clean::{CaseFlag, CleanArgs, FillFlag, FormatFlag};
 use commands::lint::{FormatFlag as LintFormat, LintArgs};
 use commands::rename::{RenameArgs, RenameMode};
+use commands::undo::{Direction as UndoDirection, FormatFlag as UndoFormat, UndoRedoArgs};
 
 mod commands;
 mod prompter;
@@ -121,8 +122,36 @@ enum Command {
         /// The query string (e.g. `tag:character type:psd is:violation`).
         query: String,
     },
+    /// Undo the top of the history stack. Default unwinds the whole
+    /// `group_id` (a bulk rename / sequence); `--entry` limits to one.
+    Undo {
+        /// Only undo the single top entry, even if it's part of a group.
+        #[arg(long)]
+        entry: bool,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: UndoFormat,
+    },
+    /// Redo the most recently undone entry or group.
+    Redo {
+        /// Only redo the single entry, even if it's part of a group.
+        #[arg(long)]
+        entry: bool,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: UndoFormat,
+    },
 }
 
+fn to_exit_code(code: i32) -> ExitCode {
+    if code == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(u8::try_from(code).unwrap_or(1))
+    }
+}
+
+#[allow(clippy::too_many_lines)]
 fn main() -> Result<ExitCode> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -153,11 +182,7 @@ fn main() -> Result<ExitCode> {
                     explain,
                 },
             )?;
-            Ok(if code == 0 {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::from(u8::try_from(code).unwrap_or(1))
-            })
+            Ok(to_exit_code(code))
         }
         Command::Clean {
             paths,
@@ -182,11 +207,7 @@ fn main() -> Result<ExitCode> {
                     apply,
                 },
             )?;
-            Ok(if code == 0 {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::from(u8::try_from(code).unwrap_or(1))
-            })
+            Ok(to_exit_code(code))
         }
         Command::Rename {
             paths,
@@ -215,12 +236,30 @@ fn main() -> Result<ExitCode> {
                     sequence_stem,
                 },
             )?;
-            Ok(if code == 0 {
-                ExitCode::SUCCESS
-            } else {
-                ExitCode::from(u8::try_from(code).unwrap_or(1))
-            })
+            Ok(to_exit_code(code))
         }
         Command::Search { query: _ } => todo!("M3: DSL parser + FTS5 query"),
+        Command::Undo { entry, format } => {
+            let code = commands::undo::run(
+                &cwd,
+                &UndoRedoArgs {
+                    entry_only: entry,
+                    format,
+                    direction: UndoDirection::Undo,
+                },
+            )?;
+            Ok(to_exit_code(code))
+        }
+        Command::Redo { entry, format } => {
+            let code = commands::undo::run(
+                &cwd,
+                &UndoRedoArgs {
+                    entry_only: entry,
+                    format,
+                    direction: UndoDirection::Redo,
+                },
+            )?;
+            Ok(to_exit_code(code))
+        }
     }
 }

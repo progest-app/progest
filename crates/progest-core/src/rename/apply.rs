@@ -165,10 +165,16 @@ pub enum ApplyError {
 /// Apply driver. Holds borrowed references to the filesystem,
 /// index, and history seams so callers can compose with their own
 /// meta-store / reconcile loops.
+///
+/// `history` is optional: `progest rename` / `clean --apply` wire in
+/// the real `SQLite` store so every op lands on the undo stack, while
+/// `progest undo` / `redo` drive the FS + index side of a replay
+/// without inflating the stack (the separate `Store::undo` /
+/// `Store::redo` call flips the original entry's consumed flag).
 pub struct Rename<'a> {
     fs: &'a dyn FileSystem,
     index: &'a dyn Index,
-    history: &'a dyn history::Store,
+    history: Option<&'a dyn history::Store>,
 }
 
 #[derive(Debug)]
@@ -186,7 +192,23 @@ impl<'a> Rename<'a> {
         index: &'a dyn Index,
         history: &'a dyn history::Store,
     ) -> Self {
-        Self { fs, index, history }
+        Self {
+            fs,
+            index,
+            history: Some(history),
+        }
+    }
+
+    /// Construct a driver that skips the history append. Used by the
+    /// `progest undo` / `redo` CLI path where the history entry already
+    /// exists on the log and the caller just needs the FS + index side
+    /// of the replay.
+    pub fn new_without_history(fs: &'a dyn FileSystem, index: &'a dyn Index) -> Self {
+        Self {
+            fs,
+            index,
+            history: None,
+        }
     }
 
     /// Execute every clean op in `preview`. See module docs for the
@@ -241,26 +263,28 @@ impl<'a> Rename<'a> {
                 });
             }
 
-            let effective_group = staged_op
-                .op
-                .group_id
-                .clone()
-                .or_else(|| auto_batch_group.clone());
-            let op = Operation::Rename {
-                from: staged_op.op.from.clone(),
-                to: staged_op.op.to.clone(),
-                rule_id: staged_op.op.rule_id.clone(),
-            };
-            let mut req = AppendRequest::new(op);
-            if let Some(group) = effective_group {
-                req = req.with_group(group);
-            }
-            if let Err(e) = self.history.append(&req) {
-                history_warnings.push(HistoryWarning {
+            if let Some(history) = self.history {
+                let effective_group = staged_op
+                    .op
+                    .group_id
+                    .clone()
+                    .or_else(|| auto_batch_group.clone());
+                let op = Operation::Rename {
                     from: staged_op.op.from.clone(),
                     to: staged_op.op.to.clone(),
-                    message: e.to_string(),
-                });
+                    rule_id: staged_op.op.rule_id.clone(),
+                };
+                let mut req = AppendRequest::new(op);
+                if let Some(group) = effective_group {
+                    req = req.with_group(group);
+                }
+                if let Err(e) = history.append(&req) {
+                    history_warnings.push(HistoryWarning {
+                        from: staged_op.op.from.clone(),
+                        to: staged_op.op.to.clone(),
+                        message: e.to_string(),
+                    });
+                }
             }
         }
 
