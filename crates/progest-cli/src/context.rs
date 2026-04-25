@@ -18,6 +18,8 @@ use std::path::Path;
 
 use anyhow::{Context, Result};
 use progest_core::accepts::{AliasCatalog, SchemaLoad, load_alias_catalog};
+use progest_core::history::SqliteStore as HistoryStore;
+use progest_core::index::SqliteIndex;
 use progest_core::naming::{CaseStyle, CleanupConfig, extract_cleanup_config};
 use progest_core::project::{ProjectDocument, ProjectRoot};
 use progest_core::rules::{
@@ -111,4 +113,18 @@ pub fn load_cleanup_config(
         cfg.remove_copy_suffix = true;
     }
     Ok(cfg)
+}
+
+/// Open the project's `SQLite` index. Wraps the recurring "opening
+/// index `<path>`" `with_context` call.
+pub fn open_index(root: &ProjectRoot) -> Result<SqliteIndex> {
+    SqliteIndex::open(&root.index_db())
+        .with_context(|| format!("opening index `{}`", root.index_db().display()))
+}
+
+/// Open the project's history log. Wraps the recurring "opening
+/// history `<path>`" `with_context` call.
+pub fn open_history(root: &ProjectRoot) -> Result<HistoryStore> {
+    HistoryStore::open(&root.history_db())
+        .with_context(|| format!("opening history `{}`", root.history_db().display()))
 }

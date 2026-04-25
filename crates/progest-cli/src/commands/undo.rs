@@ -23,7 +23,7 @@ use progest_core::index::SqliteIndex;
 use progest_core::rename::{Rename, RenameOp, RenamePreview};
 use serde::Serialize;
 
-use crate::context::discover_root;
+use crate::context::{discover_root, open_history, open_index};
 use crate::output::{OutputFormat, emit_json};
 
 /// Which side of the stack the command is operating on. Carried
@@ -53,8 +53,7 @@ pub struct UndoRedoArgs {
 pub fn run(cwd: &Path, args: &UndoRedoArgs) -> Result<i32> {
     let root = discover_root(cwd)?;
 
-    let history = HistoryStore::open(&root.history_db())
-        .with_context(|| format!("opening history `{}`", root.history_db().display()))?;
+    let history = open_history(&root)?;
 
     // Peek at the target entry without flipping consumed yet.
     let target = peek_target(&history, args.direction)?;
@@ -68,8 +67,7 @@ pub fn run(cwd: &Path, args: &UndoRedoArgs) -> Result<i32> {
     let plan = collect_plan(&history, &target, args)?;
 
     let fs = StdFileSystem::new(root.root().to_path_buf());
-    let index = SqliteIndex::open(&root.index_db())
-        .with_context(|| format!("opening index `{}`", root.index_db().display()))?;
+    let index = open_index(&root)?;
 
     let mut replayed: Vec<ReportRow> = Vec::new();
     for entry in &plan {

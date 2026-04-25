@@ -28,8 +28,6 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use progest_core::fs::{ProjectPath, ScanEntry, StdFileSystem};
-use progest_core::history::SqliteStore as HistoryStore;
-use progest_core::index::SqliteIndex;
 use progest_core::naming::{
     CaseStyle, CleanupConfig, FillMode, Hole, NameCandidate, Segment, clean_basename, resolve,
 };
@@ -42,7 +40,9 @@ use progest_core::sequence::detect_sequences;
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::context::{CleanupOverrides, discover_root, load_cleanup_config};
+use crate::context::{
+    CleanupOverrides, discover_root, load_cleanup_config, open_history, open_index,
+};
 use crate::output::{OutputFormat, emit_json};
 use crate::prompter::StdinHolePrompter;
 use crate::walk::collect_entries;
@@ -417,10 +417,8 @@ fn commit(
         return Ok(1);
     }
 
-    let index = SqliteIndex::open(&root.index_db())
-        .with_context(|| format!("opening index `{}`", root.index_db().display()))?;
-    let history = HistoryStore::open(&root.history_db())
-        .with_context(|| format!("opening history `{}`", root.history_db().display()))?;
+    let index = open_index(root)?;
+    let history = open_history(root)?;
     let driver = Rename::new(&fs, &index, &history);
     let outcome = driver.apply(&preview).context("applying rename batch")?;
 
