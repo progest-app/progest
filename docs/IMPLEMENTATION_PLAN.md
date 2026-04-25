@@ -10,7 +10,7 @@
 
 ## 0. 進捗スナップショット
 
-最終更新: 2026-04-25（M3 スコープ整合: §0/§5/M2_HANDOFF が「M3 = import」と「M3 = 検索とビュー」で乖離していたのを、§5 を正として揃え直した）
+最終更新: 2026-04-25（M3 kickoff: `docs/SEARCH_DSL.md` + `docs/M3_HANDOFF.md` 初版 landed、Tauri IPC を M3 で同時実装することと lindera は v1.x defer する方針を明示）
 
 - **M0 Skeleton**: 完了
 - **M1 Core data layer**: 完了 — `core::fs` / `core::identity` / `core::meta` / `core::index` / `core::reconcile` / `core::watch` / `core::project` + CLI `init`/`scan`/`doctor` + 10k-file incremental scan ベンチ（実測 ~82 ms、5 s gate の 60 倍下回り）
@@ -39,7 +39,13 @@
   - [ ] `core::accepts` follow-up（import ランキング API / `suggested_destinations` 充填 / `[extension_compounds]` loader）— 別 issue で管理、M4 `core::import` 着手時に合流
   - [ ] `core::rename` follow-up（`progest doctor` で `.progest/local/staging/` の orphan 掃除 / 連番の renumber 操作 / `--from-stdin` でのバルク dry-run）— 別 issue で管理
   - [ ] `progest undo` / `redo` の tag_add / tag_remove / meta_edit / import 対応 — 各 op 発行側（M4 import 等）着手時に合流
-- **M3 検索とビュー**: 次着手。`core::search` + FTS5 + コマンドパレット UI + tree/flat view + ディレクトリインスペクター + `is:misplaced` + views.toml + CLI `search`/`tag`。詳細は §5 M3。
+- **M3 検索とビュー**: 進行中。`core::search` + FTS5 + コマンドパレット UI + tree/flat view + ディレクトリインスペクター + `is:misplaced` + views.toml + CLI `search`/`tag` + Tauri IPC 同時実装。詳細は §5 M3、進行中の引き継ぎは [`docs/M3_HANDOFF.md`](./M3_HANDOFF.md)。
+  - [x] DSL 仕様書 [`docs/SEARCH_DSL.md`](./SEARCH_DSL.md) — 文法 EBNF / 予約キー全 8 種 / 自由テキスト FTS5 trigram / カスタムフィールド / 性能契約 (10k=50ms / 100k=100ms p95) / Worked examples 8 / v1.x defer 候補（feat/m3-search-dsl-spec）
+  - [ ] `core::search` parser + AST + planner + executor — DSL 仕様書 §10 の Worked examples を golden に
+  - [ ] `core::index::fts5` + `custom_fields` テーブル — M1 `core::index` の migration に追記
+  - [ ] CLI `progest search` / `progest tag` / `progest view`（save/delete/list）
+  - [ ] shadcn/ui 初期化 + コマンドパレット + tree/flat view + ディレクトリインスペクター + placement バッジ
+  - [ ] Tauri IPC: search.execute / search.history / view.{list,save,delete} / accepts.{read,write}
 - **M4 サムネ + 外部連携 + AI + テンプレート**: M3 後着手。`core::import`（accepts ランキング + rename preview の一体適用、history `Operation::Import`）/ `core::thumbnail` / `core::template` / `core::ai`。M4 import kickoff 向け sequence 統合設計メモは [`docs/M2_HANDOFF.md §5`](./M2_HANDOFF.md)
 
 後続 PR に切り出した既完了モジュールの残タスク:
@@ -344,18 +350,22 @@ DSL の正規仕様は [NAMING_RULES_DSL.md](./NAMING_RULES_DSL.md)（parser / e
 ### M3 — 検索とビュー（1ヶ月）
 **目的**: クエリ駆動でファイルを操作できる UI。配置違反の可視化とディレクトリ単位の accepts 編集 UI も同時に提供する。
 
-- `core::search` — DSL パーサ（key:value + 自由テキスト + ブール）、クエリプラン
-- FTS5 + trigram の設定、日本語検索の基本動作
-- コマンドパレット UI（shadcn Command + Dialog）
+DSL の正規仕様は [`docs/SEARCH_DSL.md`](./SEARCH_DSL.md)、進行中の引き継ぎは [`docs/M3_HANDOFF.md`](./M3_HANDOFF.md)。
+
+- `core::search` — DSL パーサ（key:value + 自由テキスト + ブール）、AST、validate、planner、executor。SEARCH_DSL.md §10 Worked examples を golden fixture に
+- `core::index::fts5` + `custom_fields` テーブル — FTS5 virtual table（`tokenize='trigram'`、`name`/`notes` 列）、`custom_fields(file_id, key, value_text, value_int)`
+- 日本語処理は **trigram 固定**。lindera オプションは v1.x defer（SEARCH_DSL.md §3.2 / §15）
+- コマンドパレット UI（shadcn Command + Dialog、Cmd+K、recent history `local/history.json`）
 - ツリービュー、フラットビュー、保存済みビュー
 - ディレクトリインスペクターパネル（accepts 編集フォーム: chip input + inherit チェックボックス + mode セレクタ）
-- flat view / ツリー上の placement 違反バッジ（naming とは別色）
+- flat view / ツリー上の placement 違反バッジ（naming とは別色、暫定 amber/sky/violet）
 - `is:misplaced` クエリサポート
-- views.toml の I/O
-- CLI: `search`, `tag add|remove|list`
-- カスタムフィールドのクエリ対応
+- views.toml の I/O（loader / saver、CLI `progest view {save,delete,list}` 同時実装）
+- CLI: `search`, `tag add|remove|list`, `view {save,delete,list}`
+- カスタムフィールドのクエリ対応（`schema.toml` の `[custom_fields.<name>]`）
+- **Tauri IPC 層を M3 で同時実装**: `search.execute` / `search.history.{list,clear}` / `view.{list,save,delete}` / `accepts.{read,write}` / `files.{list_tree,list_flat}`。M4 import で IPC 表面が増える前に search/view/accepts の pattern を確定させる
 
-完了条件: UI で `tag:foo type:psd is:violation` / `is:misplaced` 相当が 100ms 以下で返る、保存済みビューが永続化される、ディレクトリインスペクターで accepts を編集して `.dirmeta.toml` に反映される。
+完了条件: UI で `tag:foo type:psd is:violation` / `is:misplaced` 相当が 100ms 以下で返る（100k files 規模、SEARCH_DSL.md §13 ベンチ準拠）、保存済みビューが永続化される、ディレクトリインスペクターで accepts を編集して `.dirmeta.toml` に反映される。
 
 ### M4 — サムネ + 外部連携 + AI + テンプレート（1ヶ月）
 **目的**: 価値提案を完成させる。accepts を踏まえた D&D import / CLI import もここで完結する。
