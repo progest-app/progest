@@ -20,10 +20,10 @@ use anyhow::{Context, Result, anyhow};
 use progest_core::fs::StdFileSystem;
 use progest_core::history::{Entry, Operation, SqliteStore as HistoryStore, Store as _};
 use progest_core::index::SqliteIndex;
-use progest_core::project::ProjectRoot;
 use progest_core::rename::{Rename, RenameOp, RenamePreview};
 use serde::Serialize;
 
+use crate::context::discover_root;
 use crate::output::{OutputFormat, emit_json};
 
 /// Which side of the stack the command is operating on. Carried
@@ -51,12 +51,7 @@ pub struct UndoRedoArgs {
 }
 
 pub fn run(cwd: &Path, args: &UndoRedoArgs) -> Result<i32> {
-    let root = ProjectRoot::discover(cwd).with_context(|| {
-        format!(
-            "could not find a Progest project at or above `{}`",
-            cwd.display()
-        )
-    })?;
+    let root = discover_root(cwd)?;
 
     let history = HistoryStore::open(&root.history_db())
         .with_context(|| format!("opening history `{}`", root.history_db().display()))?;

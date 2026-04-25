@@ -18,18 +18,17 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use progest_core::accepts::{AliasCatalog, SchemaLoad, load_alias_catalog};
 use progest_core::fs::{EntryKind, IgnoreRules, ScanEntry, Scanner, StdFileSystem};
 use progest_core::lint::{LintOptions, LintReport, lint_paths};
 use progest_core::meta::StdMetaStore;
-use progest_core::naming::{CleanupConfig, extract_cleanup_config};
-use progest_core::project::{ProjectDocument, ProjectRoot};
-use progest_core::rules::{
-    BUILTIN_COMPOUND_EXTS, CompiledRuleSet, RuleSetLayer, RuleSource, Severity, Violation,
-    compile_ruleset, load_document,
-};
+use progest_core::project::ProjectRoot;
+use progest_core::rules::{BUILTIN_COMPOUND_EXTS, Severity, Violation};
 use serde::Serialize;
 
+use crate::context::{
+    CleanupOverrides, discover_root, load_alias_catalog_from_root, load_cleanup_config,
+    load_ruleset,
+};
 use crate::output::{OutputFormat, emit_json};
 
 pub struct LintArgs {
@@ -42,16 +41,11 @@ pub struct LintArgs {
 }
 
 pub fn run(cwd: &Path, args: &LintArgs) -> Result<i32> {
-    let root = ProjectRoot::discover(cwd).with_context(|| {
-        format!(
-            "could not find a Progest project at or above `{}`",
-            cwd.display()
-        )
-    })?;
+    let root = discover_root(cwd)?;
 
     let ruleset = load_ruleset(&root)?;
-    let catalog = load_catalog(&root)?;
-    let cleanup = load_cleanup(&root)?;
+    let catalog = load_alias_catalog_from_root(&root)?;
+    let cleanup = load_cleanup_config(&root, &CleanupOverrides::default())?;
 
     let entries = collect_entries(&root, &args.paths)?;
     let paths: Vec<_> = entries.into_iter().map(|e| e.path).collect();
@@ -75,55 +69,6 @@ pub fn run(cwd: &Path, args: &LintArgs) -> Result<i32> {
     }
 
     Ok(i32::from(report.fails_ci()))
-}
-
-// --- Config loaders --------------------------------------------------------
-
-fn load_ruleset(root: &ProjectRoot) -> Result<CompiledRuleSet> {
-    let path = root.rules_toml();
-    if !path.exists() {
-        return compile_ruleset(vec![]).context("compiling empty ruleset (should be infallible)");
-    }
-    let raw =
-        std::fs::read_to_string(&path).with_context(|| format!("reading `{}`", path.display()))?;
-    let doc = load_document(&raw).with_context(|| format!("parsing `{}`", path.display()))?;
-    // Surface loader warnings so rule authors see typos early.
-    for w in &doc.warnings {
-        eprintln!("warning: rules.toml: {w:?}");
-    }
-    let layer = RuleSetLayer {
-        source: RuleSource::ProjectWide,
-        base_dir: progest_core::fs::ProjectPath::root(),
-        rules: doc.rules,
-    };
-    compile_ruleset(vec![layer]).with_context(|| format!("compiling `{}`", path.display()))
-}
-
-fn load_catalog(root: &ProjectRoot) -> Result<AliasCatalog> {
-    let path = root.schema_toml();
-    if !path.exists() {
-        return Ok(AliasCatalog::builtin());
-    }
-    let raw =
-        std::fs::read_to_string(&path).with_context(|| format!("reading `{}`", path.display()))?;
-    let SchemaLoad { catalog, warnings } =
-        load_alias_catalog(&raw).with_context(|| format!("parsing `{}`", path.display()))?;
-    for w in &warnings {
-        eprintln!("warning: schema.toml: {w:?}");
-    }
-    Ok(catalog)
-}
-
-fn load_cleanup(root: &ProjectRoot) -> Result<CleanupConfig> {
-    let raw = std::fs::read_to_string(root.project_toml())
-        .with_context(|| format!("reading `{}`", root.project_toml().display()))?;
-    let doc = ProjectDocument::from_toml_str(&raw)
-        .with_context(|| format!("parsing `{}`", root.project_toml().display()))?;
-    let (cfg, warns) = extract_cleanup_config(&doc.extra).context("extracting [cleanup]")?;
-    for w in warns {
-        eprintln!("warning: project.toml [cleanup]: {w:?}");
-    }
-    Ok(cfg)
 }
 
 fn collect_entries(root: &ProjectRoot, paths: &[PathBuf]) -> Result<Vec<ScanEntry>> {

@@ -19,6 +19,7 @@ use commands::undo::{Direction as UndoDirection, UndoRedoArgs};
 use output::OutputFormat;
 
 mod commands;
+mod context;
 mod output;
 mod prompter;
 

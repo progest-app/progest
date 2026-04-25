@@ -35,10 +35,8 @@ use clap::ValueEnum;
 use progest_core::fs::{EntryKind, IgnoreRules, ProjectPath, ScanEntry, Scanner, StdFileSystem};
 use progest_core::history::SqliteStore as HistoryStore;
 use progest_core::index::SqliteIndex;
-use progest_core::naming::{
-    CaseStyle, CleanupConfig, FillMode, NameCandidate, clean_basename, extract_cleanup_config,
-};
-use progest_core::project::{ProjectDocument, ProjectRoot};
+use progest_core::naming::{CleanupConfig, FillMode, NameCandidate, clean_basename};
+use progest_core::project::ProjectRoot;
 use progest_core::rename::{
     ApplyOutcome, Rename, RenameOp, RenamePreview, RenameRequest, build_preview,
     build_preview_with_prompter, requests_from_sequence,
@@ -48,6 +46,7 @@ use progest_core::sequence::detect_sequences;
 use serde::Serialize;
 
 use crate::commands::clean::{CaseFlag, FillFlag};
+use crate::context::{CleanupOverrides, discover_root, load_cleanup_config};
 use crate::output::{OutputFormat, emit_json};
 use crate::prompter::StdinHolePrompter;
 
@@ -78,12 +77,7 @@ pub enum RenameMode {
 }
 
 pub fn run(cwd: &Path, args: &RenameArgs) -> Result<i32> {
-    let root = ProjectRoot::discover(cwd).with_context(|| {
-        format!(
-            "could not find a Progest project at or above `{}`",
-            cwd.display()
-        )
-    })?;
+    let root = discover_root(cwd)?;
 
     let preview = if args.from_stdin {
         if !args.paths.is_empty() {
@@ -111,7 +105,7 @@ pub fn run(cwd: &Path, args: &RenameArgs) -> Result<i32> {
 // --- Path mode -------------------------------------------------------------
 
 fn build_preview_from_paths(root: &ProjectRoot, args: &RenameArgs) -> Result<RenamePreview> {
-    let cfg = load_cleanup_config(root, args)?;
+    let cfg = load_cleanup_for_args(root, args)?;
     let entries = collect_entries(root, &args.paths)?;
 
     let requests: Vec<RenameRequest> = entries
@@ -139,42 +133,13 @@ fn build_preview_from_paths(root: &ProjectRoot, args: &RenameArgs) -> Result<Ren
     Ok(preview)
 }
 
-fn load_cleanup_config(root: &ProjectRoot, args: &RenameArgs) -> Result<CleanupConfig> {
-    let raw = std::fs::read_to_string(root.project_toml())
-        .with_context(|| format!("failed to read `{}`", root.project_toml().display()))?;
-    let doc = ProjectDocument::from_toml_str(&raw)
-        .with_context(|| format!("failed to parse `{}`", root.project_toml().display()))?;
-    let (mut cfg, warns) = extract_cleanup_config(&doc.extra).with_context(|| {
-        format!(
-            "failed to read [cleanup] from `{}`",
-            root.project_toml().display()
-        )
-    })?;
-    for w in warns {
-        eprintln!("warning: {w:?}");
-    }
-    if let Some(case) = &args.case {
-        cfg.convert_case = case_flag_to_style(case);
-    }
-    if args.strip_cjk {
-        cfg.remove_cjk = true;
-    }
-    if args.strip_suffix {
-        cfg.remove_copy_suffix = true;
-    }
-    Ok(cfg)
-}
-
-fn case_flag_to_style(flag: &CaseFlag) -> CaseStyle {
-    match flag {
-        CaseFlag::Off => CaseStyle::Off,
-        CaseFlag::Snake => CaseStyle::Snake,
-        CaseFlag::Kebab => CaseStyle::Kebab,
-        CaseFlag::Camel => CaseStyle::Camel,
-        CaseFlag::Pascal => CaseStyle::Pascal,
-        CaseFlag::Lower => CaseStyle::Lower,
-        CaseFlag::Upper => CaseStyle::Upper,
-    }
+fn load_cleanup_for_args(root: &ProjectRoot, args: &RenameArgs) -> Result<CleanupConfig> {
+    let overrides = CleanupOverrides {
+        case: args.case.as_ref().map(CaseFlag::to_style),
+        force_remove_cjk: args.strip_cjk,
+        force_remove_copy_suffix: args.strip_suffix,
+    };
+    load_cleanup_config(root, &overrides)
 }
 
 fn collect_entries(root: &ProjectRoot, paths: &[PathBuf]) -> Result<Vec<ScanEntry>> {
