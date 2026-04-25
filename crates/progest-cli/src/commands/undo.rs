@@ -17,7 +17,6 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, anyhow};
-use clap::ValueEnum;
 use progest_core::fs::StdFileSystem;
 use progest_core::history::{Entry, Operation, SqliteStore as HistoryStore, Store as _};
 use progest_core::index::SqliteIndex;
@@ -25,11 +24,7 @@ use progest_core::project::ProjectRoot;
 use progest_core::rename::{Rename, RenameOp, RenamePreview};
 use serde::Serialize;
 
-#[derive(ValueEnum, Clone, Debug)]
-pub enum FormatFlag {
-    Text,
-    Json,
-}
+use crate::output::{OutputFormat, emit_json};
 
 /// Which side of the stack the command is operating on. Carried
 /// through the same function so the two subcommands share every
@@ -51,7 +46,7 @@ impl Direction {
 
 pub struct UndoRedoArgs {
     pub entry_only: bool,
-    pub format: FormatFlag,
+    pub format: OutputFormat,
     pub direction: Direction,
 }
 
@@ -221,10 +216,10 @@ struct ReportRow {
     group_id: Option<String>,
 }
 
-fn emit_nothing(fmt: &FormatFlag, dir: Direction) {
+fn emit_nothing(fmt: &OutputFormat, dir: Direction) {
     match fmt {
-        FormatFlag::Text => println!("(nothing to {})", dir.label()),
-        FormatFlag::Json => {
+        OutputFormat::Text => println!("(nothing to {})", dir.label()),
+        OutputFormat::Json => {
             // Empty array keeps the wire contract: consumers can
             // always iterate the top-level array.
             println!("[]");
@@ -232,9 +227,9 @@ fn emit_nothing(fmt: &FormatFlag, dir: Direction) {
     }
 }
 
-fn emit(fmt: &FormatFlag, dir: Direction, rows: &[ReportRow]) {
+fn emit(fmt: &OutputFormat, dir: Direction, rows: &[ReportRow]) {
     match fmt {
-        FormatFlag::Text => {
+        OutputFormat::Text => {
             println!(
                 "{}d {} entr{}",
                 dir.label(),
@@ -250,10 +245,11 @@ fn emit(fmt: &FormatFlag, dir: Direction, rows: &[ReportRow]) {
                 println!("  #{} {} {}{}", r.entry_id, r.op_kind, r.summary, group);
             }
         }
-        FormatFlag::Json => match serde_json::to_string_pretty(rows) {
-            Ok(s) => println!("{s}"),
-            Err(e) => eprintln!("error: serializing report: {e}"),
-        },
+        OutputFormat::Json => {
+            if let Err(e) = emit_json(&rows, "undo/redo") {
+                eprintln!("error: {e}");
+            }
+        }
     }
 }
 

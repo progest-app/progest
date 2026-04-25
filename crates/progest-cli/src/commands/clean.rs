@@ -43,15 +43,10 @@ use progest_core::sequence::detect_sequences;
 use serde::Serialize;
 use uuid::Uuid;
 
+use crate::output::{OutputFormat, emit_json};
 use crate::prompter::StdinHolePrompter;
 
 // --- CLI flag types --------------------------------------------------------
-
-#[derive(ValueEnum, Clone, Debug)]
-pub enum FormatFlag {
-    Text,
-    Json,
-}
 
 #[derive(ValueEnum, Clone, Debug)]
 pub enum CaseFlag {
@@ -92,7 +87,7 @@ pub enum FillFlag {
 
 pub struct CleanArgs {
     pub paths: Vec<PathBuf>,
-    pub format: FormatFlag,
+    pub format: OutputFormat,
     pub case: Option<CaseFlag>,
     pub strip_cjk: bool,
     pub strip_suffix: bool,
@@ -119,8 +114,8 @@ pub fn run(cwd: &Path, args: &CleanArgs) -> Result<i32> {
     let report = build_report(&root, &cfg, &fill_mode, &entries, &seq_groups);
 
     match args.format {
-        FormatFlag::Text => emit_text(&report),
-        FormatFlag::Json => emit_json(&report)?,
+        OutputFormat::Text => emit_text(&report),
+        OutputFormat::Json => emit_json(&report, "clean")?,
     }
 
     if args.apply {
@@ -407,12 +402,6 @@ fn emit_text(report: &Report<'_>) {
         report.summary.unchanged,
         seq_members,
     );
-}
-
-fn emit_json(report: &Report<'_>) -> Result<()> {
-    let s = serde_json::to_string_pretty(report).context("serializing clean report")?;
-    println!("{s}");
-    Ok(())
 }
 
 // --- Apply -----------------------------------------------------------------

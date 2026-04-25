@@ -12,12 +12,14 @@ use std::process::ExitCode;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-use commands::clean::{CaseFlag, CleanArgs, FillFlag, FormatFlag};
-use commands::lint::{FormatFlag as LintFormat, LintArgs};
+use commands::clean::{CaseFlag, CleanArgs, FillFlag};
+use commands::lint::LintArgs;
 use commands::rename::{RenameArgs, RenameMode};
-use commands::undo::{Direction as UndoDirection, FormatFlag as UndoFormat, UndoRedoArgs};
+use commands::undo::{Direction as UndoDirection, UndoRedoArgs};
+use output::OutputFormat;
 
 mod commands;
+mod output;
 mod prompter;
 
 /// Naming-rule-first file management for creative projects.
@@ -48,7 +50,7 @@ enum Command {
         paths: Vec<PathBuf>,
         /// Output format.
         #[arg(long, default_value = "text", value_enum)]
-        format: LintFormat,
+        format: OutputFormat,
         /// Keep rule traces for every evaluated file (not just
         /// violating ones). Produces a much larger JSON payload.
         #[arg(long)]
@@ -61,7 +63,7 @@ enum Command {
         paths: Vec<PathBuf>,
         /// Output format.
         #[arg(long, default_value = "text", value_enum)]
-        format: FormatFlag,
+        format: OutputFormat,
         /// Override `[cleanup].convert_case`.
         #[arg(long, value_enum)]
         case: Option<CaseFlag>,
@@ -95,7 +97,7 @@ enum Command {
         mode: RenameMode,
         /// Output format.
         #[arg(long, default_value = "text", value_enum)]
-        format: FormatFlag,
+        format: OutputFormat,
         /// Override `[cleanup].convert_case`.
         #[arg(long, value_enum)]
         case: Option<CaseFlag>,
@@ -130,7 +132,7 @@ enum Command {
         entry: bool,
         /// Output format.
         #[arg(long, default_value = "text", value_enum)]
-        format: UndoFormat,
+        format: OutputFormat,
     },
     /// Redo the most recently undone entry or group.
     Redo {
@@ -139,7 +141,7 @@ enum Command {
         entry: bool,
         /// Output format.
         #[arg(long, default_value = "text", value_enum)]
-        format: UndoFormat,
+        format: OutputFormat,
     },
 }
 

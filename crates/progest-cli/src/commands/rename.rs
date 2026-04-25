@@ -47,13 +47,14 @@ use progest_core::rules::BUILTIN_COMPOUND_EXTS;
 use progest_core::sequence::detect_sequences;
 use serde::Serialize;
 
-use crate::commands::clean::{CaseFlag, FillFlag, FormatFlag};
+use crate::commands::clean::{CaseFlag, FillFlag};
+use crate::output::{OutputFormat, emit_json};
 use crate::prompter::StdinHolePrompter;
 
 /// CLI arguments accepted by `progest rename`.
 pub struct RenameArgs {
     pub paths: Vec<PathBuf>,
-    pub format: FormatFlag,
+    pub format: OutputFormat,
     pub mode: RenameMode,
     pub from_stdin: bool,
     pub case: Option<CaseFlag>,
@@ -286,15 +287,15 @@ struct PreviewSummary {
     conflicting: usize,
 }
 
-fn emit_preview(preview: &RenamePreview, format: &FormatFlag) -> Result<()> {
+fn emit_preview(preview: &RenamePreview, format: &OutputFormat) -> Result<()> {
     let summary = PreviewSummary {
         total: preview.ops.len(),
         clean: preview.clean_ops().count(),
         conflicting: preview.conflicting_ops().count(),
     };
     match format {
-        FormatFlag::Text => emit_preview_text(preview, &summary),
-        FormatFlag::Json => emit_preview_json(preview, &summary)?,
+        OutputFormat::Text => emit_preview_text(preview, &summary),
+        OutputFormat::Json => emit_preview_json(preview, &summary)?,
     }
     Ok(())
 }
@@ -325,9 +326,7 @@ fn emit_preview_json(preview: &RenamePreview, summary: &PreviewSummary) -> Resul
             conflicting: summary.conflicting,
         },
     };
-    let s = serde_json::to_string_pretty(&report).context("serializing preview report")?;
-    println!("{s}");
-    Ok(())
+    emit_json(&report, "rename preview")
 }
 
 // --- Apply ------------------------------------------------------------------
@@ -348,7 +347,11 @@ struct AppliedPath<'a> {
     to: &'a ProjectPath,
 }
 
-fn apply_preview(root: &ProjectRoot, preview: &RenamePreview, format: &FormatFlag) -> Result<i32> {
+fn apply_preview(
+    root: &ProjectRoot,
+    preview: &RenamePreview,
+    format: &OutputFormat,
+) -> Result<i32> {
     if !preview.is_clean() {
         emit_preview(preview, format)?;
         eprintln!(
@@ -370,10 +373,10 @@ fn apply_preview(root: &ProjectRoot, preview: &RenamePreview, format: &FormatFla
     Ok(0)
 }
 
-fn emit_apply(outcome: &ApplyOutcome, format: &FormatFlag) -> Result<()> {
+fn emit_apply(outcome: &ApplyOutcome, format: &OutputFormat) -> Result<()> {
     match format {
-        FormatFlag::Text => emit_apply_text(outcome),
-        FormatFlag::Json => emit_apply_json(outcome)?,
+        OutputFormat::Text => emit_apply_text(outcome),
+        OutputFormat::Json => emit_apply_json(outcome)?,
     }
     Ok(())
 }
@@ -423,7 +426,5 @@ fn emit_apply_json(outcome: &ApplyOutcome) -> Result<()> {
             })
             .collect(),
     };
-    let s = serde_json::to_string_pretty(&report).context("serializing apply report")?;
-    println!("{s}");
-    Ok(())
+    emit_json(&report, "rename apply")
 }

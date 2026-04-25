@@ -18,7 +18,6 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
-use clap::ValueEnum;
 use progest_core::accepts::{AliasCatalog, SchemaLoad, load_alias_catalog};
 use progest_core::fs::{EntryKind, IgnoreRules, ScanEntry, Scanner, StdFileSystem};
 use progest_core::lint::{LintOptions, LintReport, lint_paths};
@@ -31,15 +30,11 @@ use progest_core::rules::{
 };
 use serde::Serialize;
 
-#[derive(ValueEnum, Clone, Debug)]
-pub enum FormatFlag {
-    Text,
-    Json,
-}
+use crate::output::{OutputFormat, emit_json};
 
 pub struct LintArgs {
     pub paths: Vec<PathBuf>,
-    pub format: FormatFlag,
+    pub format: OutputFormat,
     /// Retain rule traces for every evaluated file, not just violating
     /// ones. Produces a much larger JSON payload — only useful when
     /// authoring rules and wondering why a file matched the rule it did.
@@ -75,8 +70,8 @@ pub fn run(cwd: &Path, args: &LintArgs) -> Result<i32> {
         lint_paths(store.filesystem(), &store, &paths, &opts).context("running lint pass")?;
 
     match args.format {
-        FormatFlag::Text => emit_text(&report),
-        FormatFlag::Json => emit_json(&report)?,
+        OutputFormat::Text => emit_text(&report),
+        OutputFormat::Json => emit_json(&report, "lint")?,
     }
 
     Ok(i32::from(report.fails_ci()))
@@ -232,12 +227,6 @@ fn emit_text(report: &LintReport) {
         s.warn_count,
         s.hint_count,
     );
-}
-
-fn emit_json(report: &LintReport) -> Result<()> {
-    let s = serde_json::to_string_pretty(report).context("serializing lint report")?;
-    println!("{s}");
-    Ok(())
 }
 
 fn severity_label(s: Severity) -> &'static str {
