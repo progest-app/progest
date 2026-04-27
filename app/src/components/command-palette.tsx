@@ -1,5 +1,6 @@
 import * as React from "react";
-import { History, Triangle, Hash } from "lucide-react";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { FolderOpen, History, Triangle, Hash, X } from "lucide-react";
 
 import {
   Command,
@@ -15,11 +16,15 @@ import {
 import {
   appInfo,
   IpcError,
+  projectOpen,
+  projectRecentClear,
+  projectRecentList,
   searchExecute,
   searchHistoryClear,
   searchHistoryList,
   type HistoryEntry,
   type ProjectInfo,
+  type RecentProject,
   type RichSearchHit,
   type SearchResponse,
 } from "@/lib/ipc";
@@ -37,6 +42,7 @@ export function CommandPalette() {
   const [response, setResponse] = React.useState<SearchResponse | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [history, setHistory] = React.useState<HistoryEntry[]>([]);
+  const [recent, setRecent] = React.useState<RecentProject[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<RichSearchHit | null>(null);
 
@@ -53,9 +59,19 @@ export function CommandPalette() {
     }
   }, []);
 
+  const refreshRecent = React.useCallback(async () => {
+    try {
+      setRecent(await projectRecentList());
+    } catch (e) {
+      // Best-effort UX log; failures shouldn't block the rest of the app.
+      console.warn("recent projects: ", e);
+    }
+  }, []);
+
   React.useEffect(() => {
     void refreshProject();
-  }, [refreshProject]);
+    void refreshRecent();
+  }, [refreshProject, refreshRecent]);
 
   // Cmd+K / Ctrl+K toggle.
   React.useEffect(() => {
@@ -131,35 +147,87 @@ export function CommandPalette() {
     }
   };
 
+  const onOpenPicker = async () => {
+    try {
+      const picked = await openDialog({
+        directory: true,
+        multiple: false,
+        title: "Open Progest project",
+      });
+      if (typeof picked !== "string") return; // user cancelled
+      const info = await projectOpen(picked);
+      setProject(info.project);
+      setError(null);
+      await refreshRecent();
+      // History is per-project — reset palette state and pull the new
+      // project's log when the dialog opens next.
+      setQuery("");
+      setResponse(null);
+      setHistory([]);
+    } catch (e) {
+      const msg = e instanceof IpcError ? e.raw : String(e);
+      setError(msg);
+    }
+  };
+
+  const onPickRecent = async (entry: RecentProject) => {
+    try {
+      const info = await projectOpen(entry.root);
+      setProject(info.project);
+      setError(null);
+      await refreshRecent();
+      setQuery("");
+      setResponse(null);
+      setHistory([]);
+    } catch (e) {
+      const msg = e instanceof IpcError ? e.raw : String(e);
+      setError(msg);
+    }
+  };
+
+  const onClearRecent = async () => {
+    try {
+      await projectRecentClear();
+      setRecent([]);
+    } catch (e) {
+      const msg = e instanceof IpcError ? e.raw : String(e);
+      setError(msg);
+    }
+  };
+
   return (
     <>
-      <PaletteShortcutHint hasProject={project !== null} onOpen={() => setOpen(true)} />
+      <TopBar
+        project={project}
+        onOpenPalette={() => setOpen(true)}
+        onOpenProject={onOpenPicker}
+      />
       <CommandDialog
         open={open}
         onOpenChange={setOpen}
         title="Search"
         description="Find files by tag, type, name, or arbitrary DSL query."
       >
-        {/*
-          shouldFilter={false}: results come pre-filtered from the
-          backend; cmdk's built-in fuzzy filter would mangle the order
-          and hide hits that don't match its lowercase substring rule.
-        */}
         <Command shouldFilter={false}>
           <CommandInput
             value={query}
             onValueChange={setQuery}
-            placeholder="tag:wip type:psd is:violation …  (Cmd+K)"
+            placeholder={
+              project
+                ? "tag:wip type:psd is:violation …  (Cmd+K)"
+                : "Open a project to search"
+            }
             autoFocus
+            disabled={project === null}
           />
           <CommandList>
-            {/* No-project empty state. Search is meaningless without an attached project. */}
             {project === null ? (
-              <CommandEmpty>
-                No Progest project attached. Launch <code>progest-desktop</code>
-                {" from inside a project, or set "}
-                <code>PROGEST_PROJECT</code>.
-              </CommandEmpty>
+              <NoProjectBody
+                recent={recent}
+                onOpenPicker={onOpenPicker}
+                onPickRecent={onPickRecent}
+                onClearRecent={onClearRecent}
+              />
             ) : query.trim().length === 0 ? (
               history.length > 0 ? (
                 <CommandGroup heading="Recent">
@@ -194,7 +262,6 @@ export function CommandPalette() {
             )}
           </CommandList>
         </Command>
-        {/* Status row pinned below the list — warnings, parse errors, IPC errors. */}
         <PaletteStatus
           response={response}
           error={error}
@@ -209,6 +276,61 @@ export function CommandPalette() {
           if (!o) setSelected(null);
         }}
       />
+    </>
+  );
+}
+
+function NoProjectBody(props: {
+  recent: RecentProject[];
+  onOpenPicker: () => void;
+  onPickRecent: (entry: RecentProject) => void;
+  onClearRecent: () => void;
+}) {
+  const { recent, onOpenPicker, onPickRecent, onClearRecent } = props;
+  return (
+    <>
+      <CommandGroup heading="Project">
+        <CommandItem value="__open" onSelect={onOpenPicker}>
+          <FolderOpen className="opacity-60" />
+          <span>Open project…</span>
+          <CommandShortcut>folder picker</CommandShortcut>
+        </CommandItem>
+      </CommandGroup>
+      {recent.length > 0 ? (
+        <>
+          <CommandSeparator />
+          <CommandGroup heading="Recent projects">
+            {recent.map((entry) => (
+              <CommandItem
+                key={entry.root}
+                value={entry.root}
+                onSelect={() => onPickRecent(entry)}
+              >
+                <FolderOpen className="opacity-60" />
+                <div className="flex min-w-0 flex-col">
+                  <span className="truncate">{entry.name || entry.root}</span>
+                  {entry.name ? (
+                    <span className="truncate text-[0.625rem] text-muted-foreground">
+                      {entry.root}
+                    </span>
+                  ) : null}
+                </div>
+                <CommandShortcut>{relTime(entry.last_opened)}</CommandShortcut>
+              </CommandItem>
+            ))}
+            <CommandSeparator />
+            <CommandItem value="__clear-recent" onSelect={onClearRecent}>
+              <X className="opacity-60" />
+              <span className="text-muted-foreground">Clear recent projects</span>
+            </CommandItem>
+          </CommandGroup>
+        </>
+      ) : (
+        <CommandEmpty>
+          No project attached. Pick a folder containing{" "}
+          <code>.progest/</code> to get started.
+        </CommandEmpty>
+      )}
     </>
   );
 }
@@ -319,19 +441,34 @@ function PaletteStatus(props: {
   );
 }
 
-function PaletteShortcutHint(props: { hasProject: boolean; onOpen: () => void }) {
+function TopBar(props: {
+  project: ProjectInfo | null;
+  onOpenPalette: () => void;
+  onOpenProject: () => void;
+}) {
+  const { project, onOpenPalette, onOpenProject } = props;
   return (
-    <button
-      type="button"
-      onClick={props.onOpen}
-      className="fixed top-3 right-3 z-30 inline-flex items-center gap-2 rounded-md border bg-card px-2.5 py-1 text-xs text-muted-foreground shadow-sm hover:bg-accent"
-    >
-      <span>Search</span>
-      <kbd className="rounded bg-muted px-1.5 py-0.5 text-[0.625rem]">⌘K</kbd>
-      {!props.hasProject ? (
-        <span className="text-amber-600 dark:text-amber-300">no project</span>
-      ) : null}
-    </button>
+    <div className="fixed top-3 right-3 z-30 flex items-center gap-2">
+      <button
+        type="button"
+        onClick={onOpenProject}
+        className="inline-flex items-center gap-1.5 rounded-md border bg-card px-2.5 py-1 text-xs text-muted-foreground shadow-sm hover:bg-accent"
+        title={project ? `Open another project (current: ${project.name})` : "Open project"}
+      >
+        <FolderOpen className="size-3.5" />
+        <span>{project ? project.name : "Open project…"}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onOpenPalette}
+        className="inline-flex items-center gap-2 rounded-md border bg-card px-2.5 py-1 text-xs text-muted-foreground shadow-sm hover:bg-accent disabled:opacity-50"
+        disabled={project === null}
+        title={project === null ? "Open a project first" : "Open command palette"}
+      >
+        <span>Search</span>
+        <kbd className="rounded bg-muted px-1.5 py-0.5 text-[0.625rem]">⌘K</kbd>
+      </button>
+    </div>
   );
 }
 

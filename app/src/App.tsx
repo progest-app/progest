@@ -9,7 +9,7 @@ export function App() {
       <header>
         <h1>Progest</h1>
         <p>
-          Press <kbd>⌘K</kbd> to search.
+          Open a project, then press <kbd>⌘K</kbd> to search.
         </p>
       </header>
     </main>

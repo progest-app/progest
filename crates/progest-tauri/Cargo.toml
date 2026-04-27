@@ -24,10 +24,12 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 progest-core = { path = "../progest-core" }
 tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
 serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
 chrono = { workspace = true, features = ["clock"] }
+dirs = "5"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 

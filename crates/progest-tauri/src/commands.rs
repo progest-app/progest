@@ -1,11 +1,14 @@
 //! Tauri IPC command surface for the M3 command palette.
 //!
-//! Three search commands plus a single `app_info` snapshot the React
-//! shell calls once on boot to decide between the empty state and the
-//! palette UI. Every command returns a wire type that lives in this
-//! file (no leaky `core::*` re-exports across the boundary) so the
-//! TypeScript side can mirror it without pulling in transitive Rust
-//! types.
+//! `app_info` is the boot snapshot the React shell reads once to
+//! decide between the empty state and the palette UI. The
+//! `project_*` commands attach / list / forget projects (with the
+//! native folder picker driven from the JS side via
+//! `@tauri-apps/plugin-dialog`); the `search_*` commands run the
+//! DSL pipeline and manage the per-project recent-query log. Every
+//! command returns a wire type that lives in this file (no leaky
+//! `core::*` re-exports across the boundary) so the TypeScript side
+//! can mirror it without pulling in transitive Rust types.
 //!
 //! Errors are returned as plain `String` payloads — Tauri serializes
 //! them into `Promise.reject(...)` on the JS side. Tagged variants for
@@ -27,7 +30,10 @@ use progest_core::search::{
 use serde::Serialize;
 use tauri::State;
 
+use crate::recent::{self, RecentProject};
 use crate::state::{AppState, ProjectContext, ProjectInfo};
+use progest_core::project::ProjectRoot;
+use std::path::PathBuf;
 
 const SEARCH_HISTORY_PATH: &str = ".progest/local/search-history.json";
 
@@ -71,6 +77,67 @@ impl From<HistoryEntry> for HistoryEntryWire {
             ts: e.ts.to_rfc3339(),
         }
     }
+}
+
+/// Wire shape for one recent-projects entry.
+#[derive(Debug, Clone, Serialize)]
+pub struct RecentProjectWire {
+    pub root: String,
+    pub name: String,
+    pub last_opened: String,
+}
+
+impl From<RecentProject> for RecentProjectWire {
+    fn from(p: RecentProject) -> Self {
+        Self {
+            root: p.root,
+            name: p.name,
+            last_opened: p.last_opened.to_rfc3339(),
+        }
+    }
+}
+
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn project_open(path: String, state: State<'_, AppState>) -> Result<AppInfo, String> {
+    // Discover from the supplied path. The user may pick either the
+    // project root itself or any directory inside it; the discover()
+    // walk resolves both.
+    let start = PathBuf::from(&path);
+    let root = ProjectRoot::discover(&start)
+        .map_err(|e| format!("no Progest project found at or above `{path}`: {e}"))?;
+    let ctx = ProjectContext::open(root)?;
+    let info = ProjectInfo::from_context(&ctx);
+
+    // Record into the OS-local recent list before swapping state so a
+    // failure to persist surfaces as the open error rather than as a
+    // half-attached project.
+    if let Err(e) = recent::record(
+        std::path::Path::new(&info.root),
+        &info.name,
+        chrono::Utc::now(),
+    ) {
+        tracing::warn!("could not write recent-projects log: {e}");
+    }
+
+    let mut guard = state.project.lock().expect("project mutex poisoned");
+    *guard = Some(ctx);
+    Ok(AppInfo {
+        project: Some(info),
+    })
+}
+
+#[tauri::command]
+pub fn project_recent_list() -> Vec<RecentProjectWire> {
+    recent::load()
+        .into_iter()
+        .map(RecentProjectWire::from)
+        .collect()
+}
+
+#[tauri::command]
+pub fn project_recent_clear() -> Result<(), String> {
+    recent::clear().map_err(|e| format!("clear recent-projects log: {e}"))
 }
 
 #[tauri::command]

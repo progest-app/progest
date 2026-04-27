@@ -53,6 +53,12 @@ export type HistoryEntry = {
   ts: string; // RFC3339
 };
 
+export type RecentProject = {
+  root: string;
+  name: string;
+  last_opened: string; // RFC3339
+};
+
 // IPC errors are plain strings on the JS side. The backend prefixes the
 // no-project case with the discriminator `no_project:`; surface that as
 // a typed flag so callers can branch without string-matching elsewhere.
@@ -100,6 +106,30 @@ export async function searchHistoryList(): Promise<HistoryEntry[]> {
 export async function searchHistoryClear(): Promise<void> {
   try {
     await invoke<void>("search_history_clear");
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function projectOpen(path: string): Promise<AppInfo> {
+  try {
+    return await invoke<AppInfo>("project_open", { path });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function projectRecentList(): Promise<RecentProject[]> {
+  try {
+    return await invoke<RecentProject[]>("project_recent_list");
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function projectRecentClear(): Promise<void> {
+  try {
+    await invoke<void>("project_recent_clear");
   } catch (e) {
     throw toIpcError(e);
   }
