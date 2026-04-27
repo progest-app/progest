@@ -9,6 +9,7 @@
 
 pub mod ast;
 pub mod execute;
+pub mod history;
 pub mod lex;
 pub mod parse;
 pub mod plan;
