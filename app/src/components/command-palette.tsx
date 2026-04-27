@@ -1,5 +1,5 @@
 import * as React from "react";
-import { FolderOpen, History, X } from "lucide-react";
+import { ChevronRight, FolderOpen, History, X } from "lucide-react";
 
 import {
   Command,
@@ -22,8 +22,17 @@ import {
   type SearchResponse,
 } from "@/lib/ipc";
 import { useProject } from "@/lib/project-context";
+import {
+  fuzzyMatch,
+  groupCommands,
+  usePaletteCommands,
+  type PaletteCommand,
+} from "@/lib/palette-commands";
 import { ResultDetailDialog } from "@/components/result-detail-dialog";
 import { ViolationBadges } from "@/components/violation-badges";
+
+/** Prefix that flips the palette into "system commands" mode. */
+const COMMAND_PREFIX = ">";
 
 const SEARCH_DEBOUNCE_MS = 200;
 
@@ -36,6 +45,25 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
   const [history, setHistory] = React.useState<HistoryEntry[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [selected, setSelected] = React.useState<RichSearchHit | null>(null);
+
+  const allCommands = usePaletteCommands();
+  const isCommandMode = query.startsWith(COMMAND_PREFIX);
+  const commandQuery = isCommandMode ? query.slice(COMMAND_PREFIX.length).trim() : "";
+  const filteredCommands = React.useMemo(
+    () => allCommands.filter((c) => fuzzyMatch(commandQuery, c)),
+    [allCommands, commandQuery],
+  );
+
+  const onRunCommand = React.useCallback((cmd: PaletteCommand) => {
+    setOpen(false);
+    setQuery("");
+    // Defer to next tick so the dialog close animation isn't competing
+    // with whatever the command does (open another dialog, swap project,
+    // toggle theme).
+    queueMicrotask(() => {
+      void cmd.run();
+    });
+  }, []);
 
   // Cmd+K / Ctrl+K toggle.
   React.useEffect(() => {
@@ -73,10 +101,12 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
     setResponse(null);
   }, [project?.root]);
 
-  // Debounced search.
+  // Debounced search. Skipped when the user is in command mode
+  // (`>`-prefixed) — the query would otherwise hit search_execute as
+  // a literal `>foo` and confuse the parser.
   React.useEffect(() => {
     const trimmed = query.trim();
-    if (!open || trimmed.length === 0) {
+    if (!open || isCommandMode || trimmed.length === 0) {
       setResponse(null);
       setLoading(false);
       return;
@@ -96,7 +126,7 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
       }
     }, SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [query, open]);
+  }, [query, open, isCommandMode]);
 
   const onPickHit = (hit: RichSearchHit) => {
     setOpen(false);
@@ -130,15 +160,22 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
             value={query}
             onValueChange={setQuery}
             placeholder={
-              project
-                ? "tag:wip type:psd is:violation …  (Cmd+K)"
-                : "Open a project to search"
+              isCommandMode
+                ? "Type a command (Open project, Set theme, …)"
+                : project
+                  ? "tag:wip type:psd is:violation …  (>command for actions)"
+                  : "Open a project to search, or type > for commands"
             }
             autoFocus
-            disabled={project === null}
           />
           <CommandList>
-            {project === null ? (
+            {isCommandMode ? (
+              <CommandsBody
+                commands={filteredCommands}
+                emptyHint={commandQuery}
+                onPick={onRunCommand}
+              />
+            ) : project === null ? (
               <NoProjectBody
                 recent={recent}
                 onOpenPicker={() => {
@@ -254,6 +291,61 @@ function NoProjectBody(props: {
           <code>.progest/</code> to get started.
         </CommandEmpty>
       )}
+    </>
+  );
+}
+
+/**
+ * Render the `>`-prefixed command-mode body. Commands are bucketed
+ * by their `group` field (Project / Recent projects / Theme / …);
+ * cmdk handles arrow-key navigation across groups for free.
+ */
+function CommandsBody(props: {
+  commands: PaletteCommand[];
+  emptyHint: string;
+  onPick: (cmd: PaletteCommand) => void;
+}) {
+  const { commands, emptyHint, onPick } = props;
+  if (commands.length === 0) {
+    return (
+      <CommandEmpty>
+        {emptyHint.length > 0
+          ? `No commands matching "${emptyHint}".`
+          : "No commands available."}
+      </CommandEmpty>
+    );
+  }
+  const groups = groupCommands(commands);
+  return (
+    <>
+      {Array.from(groups.entries()).map(([group, items], idx) => (
+        <React.Fragment key={group || "(default)"}>
+          {idx > 0 ? <CommandSeparator /> : null}
+          <CommandGroup heading={group || undefined}>
+            {items.map((cmd) => (
+              <CommandItem
+                key={cmd.id}
+                value={cmd.id}
+                onSelect={() => onPick(cmd)}
+              >
+                <ChevronRight className="opacity-60" />
+                {/* min-w-0 lets the truncate kick in inside cmdk's
+                    flex row; without it the span ignores width and
+                    pushes the shortcut off-screen / onto a new line. */}
+                <span className="min-w-0 truncate">{cmd.title}</span>
+                {cmd.hint ? (
+                  <CommandShortcut
+                    className="min-w-0 max-w-[55%] truncate"
+                    title={cmd.hint}
+                  >
+                    {cmd.hint}
+                  </CommandShortcut>
+                ) : null}
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        </React.Fragment>
+      ))}
     </>
   );
 }
