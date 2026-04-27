@@ -8,6 +8,7 @@ import { ResultDetailDialog } from "@/components/result-detail-dialog";
 import { StatusBar } from "@/components/status-bar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { FlatViewSummaryProvider } from "@/lib/flat-view-context";
 import { ProjectProvider, useProject } from "@/lib/project-context";
 import { ThemeProvider } from "next-themes";
@@ -24,11 +25,13 @@ export function App() {
       storageKey="progest:theme"
       disableTransitionOnChange
     >
-      <ProjectProvider>
-        <FlatViewSummaryProvider>
-          <Shell />
-        </FlatViewSummaryProvider>
-      </ProjectProvider>
+      <TooltipProvider delayDuration={150}>
+        <ProjectProvider>
+          <FlatViewSummaryProvider>
+            <Shell />
+          </FlatViewSummaryProvider>
+        </ProjectProvider>
+      </TooltipProvider>
     </ThemeProvider>
   );
 }
