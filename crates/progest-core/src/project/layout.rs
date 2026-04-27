@@ -42,6 +42,10 @@ pub const INDEX_DB_FILENAME: &str = "index.db";
 /// Name of the `SQLite` history database (lives under `LOCAL_DIR`).
 pub const HISTORY_DB_FILENAME: &str = "history.db";
 
+/// Name of the search-history JSON file (lives under `LOCAL_DIR`,
+/// machine-local recent-query log for the command palette).
+pub const SEARCH_HISTORY_FILENAME: &str = "search-history.json";
+
 /// Name of the machine-local pending-writes / cache directory.
 pub const LOCAL_DIR: &str = "local";
 

@@ -11,7 +11,8 @@ use std::path::{Path, PathBuf};
 use super::document::ProjectError;
 use super::layout::{
     DOT_DIR, HISTORY_DB_FILENAME, INDEX_DB_FILENAME, LOCAL_DIR, PROJECT_TOML_FILENAME,
-    RULES_TOML_FILENAME, SCHEMA_TOML_FILENAME, USER_IGNORE_FILENAME, VIEWS_TOML_FILENAME,
+    RULES_TOML_FILENAME, SCHEMA_TOML_FILENAME, SEARCH_HISTORY_FILENAME, USER_IGNORE_FILENAME,
+    VIEWS_TOML_FILENAME,
 };
 
 /// Absolute path to a discovered project root.
@@ -88,6 +89,15 @@ impl ProjectRoot {
     #[must_use]
     pub fn history_db(&self) -> PathBuf {
         self.dot_dir().join(LOCAL_DIR).join(HISTORY_DB_FILENAME)
+    }
+
+    /// Absolute path of `.progest/local/search-history.json`.
+    ///
+    /// Optional: absent means "no recent queries yet". The file lives
+    /// under `local/` so it is machine-private and gitignored.
+    #[must_use]
+    pub fn search_history_json(&self) -> PathBuf {
+        self.dot_dir().join(LOCAL_DIR).join(SEARCH_HISTORY_FILENAME)
     }
 
     /// Absolute path of `.progest/rules.toml`.

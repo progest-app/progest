@@ -4,6 +4,7 @@
   "description": "Default capabilities for the Progest desktop application.",
   "windows": ["main"],
   "permissions": [
-    "core:default"
+    "core:default",
+    "dialog:default"
   ]
 }
