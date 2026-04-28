@@ -62,7 +62,37 @@ pub fn run() {
             accepts_commands::accepts_write,
             lint_commands::lint_run,
         ])
-        .setup(|_app| Ok(()))
+        .setup(|app| {
+            // We build the main window programmatically rather than via
+            // tauri.conf.json so we can call `traffic_light_position`
+            // on the builder. As of Tauri 2.10.x the JSON-config path
+            // doesn't reliably apply that field when titleBarStyle is
+            // "Overlay" — only the WebviewWindowBuilder fluent API
+            // does. Capabilities reference the "main" label, which we
+            // preserve here.
+            //
+            // Math: titlebar is 40 px tall; macOS traffic light cluster
+            // is ~14 px; ((40 − 14) / 2) ≈ 13 vertically. x = 14 keeps
+            // the cluster off the left edge by roughly the same amount
+            // macOS's Big Sur+ default title bars use.
+            let mut builder = tauri::webview::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::default(),
+            )
+            .title("Progest")
+            .inner_size(1280.0, 800.0)
+            .min_inner_size(800.0, 600.0);
+            #[cfg(target_os = "macos")]
+            {
+                builder = builder
+                    .title_bar_style(tauri::TitleBarStyle::Overlay)
+                    .hidden_title(true)
+                    .traffic_light_position(tauri::LogicalPosition::new(14.0, 13.0));
+            }
+            builder.build()?;
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
