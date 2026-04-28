@@ -205,6 +205,19 @@ export async function filesListAll(): Promise<RichSearchHit[]> {
   }
 }
 
+export type ExtensionSummary = {
+  ext: string;
+  count: number;
+};
+
+export async function extensionsCatalog(): Promise<ExtensionSummary[]> {
+  try {
+    return await invoke<ExtensionSummary[]>("extensions_catalog");
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
 // --- accepts (directory inspector) ----------------------------------------
 
 // Tagged-union mirror of `AcceptsTokenWire` in

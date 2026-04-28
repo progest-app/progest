@@ -24,6 +24,6 @@ pub use error::IndexError;
 pub use migration::{MIGRATIONS, Migration, MigrationError, apply, current_version};
 pub use row::FileRow;
 pub use store::{
-    CustomFieldEntry, CustomFieldValue, Index, RichRow, SearchProjection, SqliteIndex,
-    ViolationCounts, ViolationRecord,
+    CustomFieldEntry, CustomFieldValue, ExtensionSummary, Index, RichRow, SearchProjection,
+    SqliteIndex, ViolationCounts, ViolationRecord,
 };

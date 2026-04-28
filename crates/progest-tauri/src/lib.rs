@@ -58,6 +58,7 @@ pub fn run() {
             commands::view_delete,
             commands::files_list_dir,
             commands::files_list_all,
+            commands::extensions_catalog,
             accepts_commands::accepts_read,
             accepts_commands::accepts_write,
             lint_commands::lint_run,
