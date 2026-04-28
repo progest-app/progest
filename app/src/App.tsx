@@ -1,10 +1,11 @@
 import * as React from "react";
-import { FolderOpen } from "lucide-react";
+import { FolderOpen, FolderPlus, Sparkles } from "lucide-react";
 
 import { CommandPalette } from "@/components/command-palette";
 import { DirectoryInspector } from "@/components/directory-inspector";
 import { TreeView } from "@/components/tree-view";
 import { FlatView } from "@/components/flat-view";
+import { InitProjectDialog } from "@/components/init-project-dialog";
 import { ResultDetailDialog } from "@/components/result-detail-dialog";
 import { StatusBar } from "@/components/status-bar";
 import {
@@ -118,6 +119,7 @@ function Shell() {
         dialog as the FlatView selection.
       */}
       <CommandPalette onPickHit={(h) => setHitDetail(h)} />
+      <InitProjectDialog />
       <ResultDetailDialog
         hit={hitDetail}
         open={hitDetail !== null}
@@ -203,18 +205,26 @@ function MainShell(props: {
 }
 
 function Welcome() {
-  const { recent, openPicker, pickRecent, error } = useProject();
+  const { recent, openPicker, pickRecent, openInitDialog, error } = useProject();
   return (
     <div className="flex flex-col items-center justify-center gap-6 overflow-auto p-6">
       <div className="text-center">
         <h1 className="text-2xl font-semibold tracking-tight">Progest</h1>
         <p className="text-xs text-muted-foreground">
-          Open a project (a folder containing <code>.progest/</code>).
+          Open a project (a folder containing <code>.progest/</code>) or create a new one.
         </p>
       </div>
-      <Button onClick={() => void openPicker()}>
-        <FolderOpen /> Open project…
-      </Button>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Button onClick={() => void openPicker()}>
+          <FolderOpen /> Open project…
+        </Button>
+        <Button variant="outline" onClick={() => openInitDialog("new")}>
+          <Sparkles /> New project…
+        </Button>
+        <Button variant="outline" onClick={() => openInitDialog("existing")}>
+          <FolderPlus /> Initialize folder…
+        </Button>
+      </div>
       {recent.length > 0 ? (
         <div className="grid w-full max-w-md gap-1 text-xs">
           <div className="text-muted-foreground">Recent</div>

@@ -13,7 +13,7 @@ import type { PaletteCommand } from "./types";
  * display name or its absolute root path.
  */
 export function useProjectCommands(): PaletteCommand[] {
-  const { recent, openPicker, pickRecent } = useProject();
+  const { recent, openPicker, pickRecent, openInitDialog } = useProject();
   return React.useMemo<PaletteCommand[]>(() => {
     const cmds: PaletteCommand[] = [
       {
@@ -24,6 +24,26 @@ export function useProjectCommands(): PaletteCommand[] {
         keywords: ["folder", "picker", "directory"],
         run: () => {
           void openPicker();
+        },
+      },
+      {
+        id: "project.init.new",
+        title: "New project…",
+        group: "Project",
+        hint: "create a fresh folder",
+        keywords: ["create", "init", "fresh", "scaffold"],
+        run: () => {
+          openInitDialog("new");
+        },
+      },
+      {
+        id: "project.init.existing",
+        title: "Initialize existing folder…",
+        group: "Project",
+        hint: "init in place",
+        keywords: ["init", "existing", "in-place", "convert"],
+        run: () => {
+          openInitDialog("existing");
         },
       },
     ];
@@ -41,5 +61,5 @@ export function useProjectCommands(): PaletteCommand[] {
       });
     }
     return cmds;
-  }, [recent, openPicker, pickRecent]);
+  }, [recent, openPicker, pickRecent, openInitDialog]);
 }

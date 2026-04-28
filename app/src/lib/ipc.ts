@@ -218,6 +218,55 @@ export async function extensionsCatalog(): Promise<ExtensionSummary[]> {
   }
 }
 
+// --- project init ---------------------------------------------------------
+
+export type InitPreview = {
+  target_path: string;
+  target_exists: boolean;
+  is_existing_project: boolean;
+  predicted_file_count: number | null;
+  artifacts: string[];
+  gitignore_exists: boolean;
+};
+
+export type InitResult = {
+  project: ProjectInfo;
+  scanned: number;
+  added: number;
+  orphan_metas: number;
+};
+
+export async function projectInitPreview(path: string): Promise<InitPreview> {
+  try {
+    return await invoke<InitPreview>("project_init_preview", { path });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function projectInitNew(parent: string, name: string): Promise<InitResult> {
+  try {
+    return await invoke<InitResult>("project_init_new", { parent, name });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function projectInitExisting(path: string, name: string | null): Promise<InitResult> {
+  try {
+    return await invoke<InitResult>("project_init_existing", { path, name });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+// IpcError discriminator for "this directory already has a .progest/" — the
+// backend prefixes the string so the UI can route to "open" instead of
+// blocking the user with a flat error.
+export function isAlreadyInitialized(e: unknown): boolean {
+  return e instanceof IpcError && e.raw.startsWith("already_initialized:");
+}
+
 // --- accepts (directory inspector) ----------------------------------------
 
 // Tagged-union mirror of `AcceptsTokenWire` in
