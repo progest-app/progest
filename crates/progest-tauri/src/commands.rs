@@ -372,6 +372,34 @@ pub fn files_list_all(state: State<'_, AppState>) -> Result<Vec<RichSearchHit>, 
     Ok(rich)
 }
 
+/// One row of [`extensions_catalog`].
+#[derive(Debug, Clone, Serialize)]
+pub struct ExtensionSummaryWire {
+    pub ext: String,
+    pub count: i64,
+}
+
+/// Distinct file extensions present in the index plus their occurrence
+/// counts. The accepts editor combobox shows these as suggestions so
+/// the user can pick an extension already in use without typing.
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn extensions_catalog(state: State<'_, AppState>) -> Result<Vec<ExtensionSummaryWire>, String> {
+    let guard = state.project.lock().expect("project mutex poisoned");
+    let ctx = guard.as_ref().ok_or_else(no_project_error)?;
+    let rows = ctx
+        .index
+        .extensions_summary()
+        .map_err(|e| format!("extensions: {e}"))?;
+    Ok(rows
+        .into_iter()
+        .map(|r| ExtensionSummaryWire {
+            ext: r.ext,
+            count: r.count,
+        })
+        .collect())
+}
+
 /// True for paths whose basename is project plumbing (`.meta` /
 /// `.meta.tmp` sidecar, or `.dirmeta.toml` directory metadata) that
 /// should never reach the user-visible result lists. The scanner now
