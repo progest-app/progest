@@ -1,22 +1,32 @@
 import * as React from "react";
-import { Check, ChevronUp, Plus, Trash2, X } from "lucide-react";
+import { Command as CommandPrimitive } from "cmdk";
+import { Check, Plus, Trash2, X } from "lucide-react";
 
 import {
   acceptsRead,
   acceptsWrite,
+  extensionsCatalog,
   IpcError,
   lintRun,
   type AcceptsMode,
   type AcceptsReadResponse,
   type AcceptsToken,
   type AliasEntry,
+  type ExtensionSummary,
   type RawAccepts,
 } from "@/lib/ipc";
 import { useProject } from "@/lib/project-context";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -33,6 +43,7 @@ export function DirectoryInspector(props: { dir: string }) {
   const dir = props.dir;
   const [data, setData] = React.useState<AcceptsReadResponse | null>(null);
   const [draft, setDraft] = React.useState<RawAccepts | null>(null);
+  const [extensions, setExtensions] = React.useState<ExtensionSummary[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -43,8 +54,9 @@ export function DirectoryInspector(props: { dir: string }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await acceptsRead(dir);
+      const [res, exts] = await Promise.all([acceptsRead(dir), extensionsCatalog()]);
       setData(res);
+      setExtensions(exts);
       // Initialize draft from server. Cloning to a fresh object so the
       // chip input mutates a draft copy, not the snapshot we render the
       // "Effective" section from.
@@ -54,6 +66,7 @@ export function DirectoryInspector(props: { dir: string }) {
       setError(msg);
       setData(null);
       setDraft(null);
+      setExtensions([]);
     } finally {
       setLoading(false);
     }
@@ -144,6 +157,7 @@ export function DirectoryInspector(props: { dir: string }) {
               draft={draft}
               setDraft={setDraft}
               aliases={aliases}
+              extensions={extensions}
               onDeclareEmpty={onDeclareEmpty}
               onClearAccepts={onClearAccepts}
             />
@@ -242,10 +256,11 @@ function OwnSection(props: {
   draft: RawAccepts | null;
   setDraft: (next: RawAccepts | null) => void;
   aliases: AliasEntry[];
+  extensions: ExtensionSummary[];
   onDeclareEmpty: () => void;
   onClearAccepts: () => void;
 }) {
-  const { draft, setDraft, aliases, onDeclareEmpty, onClearAccepts } = props;
+  const { draft, setDraft, aliases, extensions, onDeclareEmpty, onClearAccepts } = props;
 
   if (!draft) {
     return (
@@ -281,6 +296,7 @@ function OwnSection(props: {
         <ExtsEditor
           tokens={draft.exts}
           aliases={aliases}
+          extensions={extensions}
           onChange={(next) => setDraft({ ...draft, exts: next })}
         />
 
@@ -326,49 +342,49 @@ function OwnSection(props: {
 function ExtsEditor(props: {
   tokens: AcceptsToken[];
   aliases: AliasEntry[];
+  extensions: ExtensionSummary[];
   onChange: (next: AcceptsToken[]) => void;
 }) {
-  const { tokens, aliases, onChange } = props;
+  const { tokens, aliases, extensions, onChange } = props;
   const [input, setInput] = React.useState("");
-  const [error, setError] = React.useState<string | null>(null);
-  const [aliasMenu, setAliasMenu] = React.useState(false);
+  const [open, setOpen] = React.useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
 
   function add(token: AcceptsToken) {
-    setError(null);
     if (containsToken(tokens, token)) return;
     onChange([...tokens, token]);
+    setInput("");
   }
 
   function remove(idx: number) {
     onChange(tokens.filter((_, i) => i !== idx));
   }
 
-  function commit() {
-    const raw = input.trim();
-    if (raw === "") return;
-    const parsed = parseTokenInput(raw);
-    if (!parsed) {
-      setError(`Invalid entry "${raw}". Use ".psd", ":image", or "" for no-extension.`);
-      return;
-    }
-    add(parsed);
-    setInput("");
-  }
+  // Project extensions that aren't already a token. The dedicated
+  // no-extension item below covers `value: ""`, so we filter empties
+  // out here too.
+  const projectExtSuggestions = extensions
+    .filter((e) => e.ext !== "")
+    .filter((e) => !containsToken(tokens, { type: "ext", value: e.ext }));
+
+  const trimmed = input.trim();
+  const typedToken = parseTokenInput(trimmed);
+  const hasNoExtToken = containsToken(tokens, { type: "ext", value: "" });
+  // Only show "Add new" when the typed entry parses and isn't already
+  // discoverable via the suggestion groups (otherwise it duplicates).
+  const showCustom =
+    typedToken !== null &&
+    !containsToken(tokens, typedToken) &&
+    !(typedToken.type === "alias" && aliases.some((a) => a.name === typedToken.name)) &&
+    !(
+      typedToken.type === "ext" &&
+      typedToken.value !== "" &&
+      projectExtSuggestions.some((e) => e.ext === typedToken.value)
+    );
 
   return (
     <div className="grid gap-1">
-      <div className="flex items-center justify-between">
-        <span className="text-muted-foreground">Extensions</span>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setAliasMenu((v) => !v)}
-          title="Add a category alias"
-        >
-          {aliasMenu ? <ChevronUp /> : <Plus />}
-          Alias…
-        </Button>
-      </div>
+      <span className="text-muted-foreground">Extensions</span>
 
       {tokens.length === 0 ? (
         <div className="text-muted-foreground">
@@ -396,60 +412,131 @@ function ExtsEditor(props: {
         </ul>
       )}
 
-      <div className="flex items-center gap-1">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
+      <Popover open={open} onOpenChange={setOpen}>
+        <Command
+          shouldFilter
+          className="overflow-visible bg-transparent p-0"
+          // Without this, cmdk swallows Escape — but Radix Popover
+          // already handles Escape, and we want it to close the
+          // dropdown rather than no-op.
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              commit();
-            }
+            if (e.key === "Escape") setOpen(false);
           }}
-          placeholder=".psd, :image, or empty for no-extension"
-          className="h-7 text-xs"
-        />
-        <Button variant="outline" size="sm" onClick={commit} disabled={input.trim() === ""}>
-          Add
-        </Button>
-      </div>
-      {error ? <div className="text-destructive">{error}</div> : null}
+        >
+          <PopoverAnchor asChild>
+            <CommandPrimitive.Input
+              ref={inputRef}
+              value={input}
+              onValueChange={setInput}
+              onFocus={() => setOpen(true)}
+              onMouseDown={() => setOpen(true)}
+              placeholder=".psd, :image, or pick from below"
+              className={cn(
+                "flex h-7 w-full rounded-md border border-input bg-transparent px-2 text-xs",
+                "placeholder:text-muted-foreground focus-visible:outline-hidden",
+                "focus-visible:ring-1 focus-visible:ring-ring",
+              )}
+            />
+          </PopoverAnchor>
+          <PopoverContent
+            align="start"
+            sideOffset={4}
+            className="w-[var(--radix-popover-trigger-width)] min-w-64 p-0"
+            // Keep focus on the input; the popover content is just a
+            // dropdown surface.
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            // Without this Radix treats clicks/focus on the anchored
+            // input as "outside" the popover and closes it. The dropdown
+            // is conceptually attached to the input, so suppress close
+            // when the interaction target is the input itself. Covers
+            // both pointerdown (mouse click) and focus (tab into input)
+            // via the unified onInteractOutside hook.
+            onInteractOutside={(e) => {
+              const target = e.target;
+              if (target instanceof Node && inputRef.current && inputRef.current.contains(target)) {
+                e.preventDefault();
+              }
+            }}
+          >
+            <CommandList className="max-h-64">
+              <CommandEmpty>No matching alias or extension.</CommandEmpty>
 
-      {aliasMenu ? (
-        <div className="rounded border bg-popover p-1">
-          {aliases.length === 0 ? (
-            <div className="px-2 py-1 text-muted-foreground">No aliases registered.</div>
-          ) : (
-            <ul className="grid max-h-40 gap-0.5 overflow-auto">
-              {aliases.map((a) => {
-                const already = tokens.some((t) => t.type === "alias" && t.name === a.name);
-                return (
-                  <li key={a.name}>
-                    <button
-                      type="button"
-                      className="grid w-full grid-cols-[1fr_auto] items-center gap-2 rounded px-2 py-1 text-left hover:bg-accent disabled:opacity-50"
-                      disabled={already}
-                      onClick={() => add({ type: "alias", name: a.name })}
+              {showCustom && typedToken ? (
+                <CommandGroup heading="New">
+                  <CommandItem
+                    value={`__custom__:${trimmed}`}
+                    keywords={[trimmed]}
+                    onSelect={() => add(typedToken)}
+                  >
+                    <Plus />
+                    <span>
+                      Add <span className="font-medium">{tokenLabel(typedToken)}</span>
+                    </span>
+                  </CommandItem>
+                </CommandGroup>
+              ) : null}
+
+              <CommandGroup heading="Special">
+                <CommandItem
+                  value="(no extension) noext nothing none"
+                  disabled={hasNoExtToken}
+                  onSelect={() => add({ type: "ext", value: "" })}
+                >
+                  <span>(no extension)</span>
+                  <span className="ml-auto text-[0.625rem] text-muted-foreground">
+                    files without an extension
+                  </span>
+                </CommandItem>
+              </CommandGroup>
+
+              {aliases.length > 0 ? (
+                <CommandGroup heading="Aliases">
+                  {aliases.map((a) => {
+                    const already = tokens.some((t) => t.type === "alias" && t.name === a.name);
+                    return (
+                      <CommandItem
+                        key={`alias-${a.name}`}
+                        value={`:${a.name}`}
+                        disabled={already}
+                        onSelect={() => add({ type: "alias", name: a.name })}
+                      >
+                        <span>
+                          :{a.name}
+                          {a.builtin ? null : (
+                            <span className="ml-1 text-[0.625rem] text-muted-foreground">
+                              (project)
+                            </span>
+                          )}
+                        </span>
+                        <span className="ml-auto text-[0.625rem] text-muted-foreground">
+                          {a.exts.length} ext{a.exts.length === 1 ? "" : "s"}
+                        </span>
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              ) : null}
+
+              {projectExtSuggestions.length > 0 ? (
+                <CommandGroup heading="In project">
+                  {projectExtSuggestions.map((e) => (
+                    <CommandItem
+                      key={`ext-${e.ext}`}
+                      value={`.${e.ext}`}
+                      onSelect={() => add({ type: "ext", value: e.ext })}
                     >
-                      <span>
-                        :{a.name}
-                        {a.builtin ? null : (
-                          <span className="ml-1 text-[0.625rem] text-muted-foreground">
-                            (project)
-                          </span>
-                        )}
+                      <span>.{e.ext}</span>
+                      <span className="ml-auto text-[0.625rem] text-muted-foreground">
+                        {e.count}
                       </span>
-                      <span className="truncate text-[0.625rem] text-muted-foreground">
-                        {a.exts.length} ext{a.exts.length === 1 ? "" : "s"}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      ) : null}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ) : null}
+            </CommandList>
+          </PopoverContent>
+        </Command>
+      </Popover>
     </div>
   );
 }
