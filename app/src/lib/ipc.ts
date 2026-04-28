@@ -141,6 +141,14 @@ export async function searchHistoryClear(): Promise<void> {
   }
 }
 
+export async function searchHistoryRecord(query: string): Promise<void> {
+  try {
+    await invoke<void>("search_history_record", { query });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
 export async function projectOpen(path: string): Promise<AppInfo> {
   try {
     return await invoke<AppInfo>("project_open", { path });

@@ -48,6 +48,21 @@ type ProjectContextValue = {
   initDialog: { open: boolean; mode: InitDialogMode };
   /** Dialog close handler. */
   closeInitDialog: () => void;
+  /**
+   * Submit a query to the FlatView. Used by the command palette when
+   * the user presses Enter on a typed search — the palette closes and
+   * the FlatView's input is populated with `query` so the result list
+   * (including hover/click affordances and saved-view tooling) takes
+   * over from the dropdown preview.
+   *
+   * Implemented as a versioned slot so the same query can be submitted
+   * twice in a row (e.g. user types `tag:wip` → Enter, edits something
+   * else, then submits the same query again to re-execute).
+   */
+  submitFlatViewQuery: (query: string) => void;
+  /** FlatView subscribes via `useEffect` and re-runs whenever `version`
+   *  changes; ignored if `null` (no submission yet this session). */
+  flatViewSubmission: { query: string; version: number } | null;
 };
 
 export type InitDialogMode = "new" | "existing";
@@ -174,6 +189,17 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     setInitDialog((d) => ({ ...d, open: false }));
   }, []);
 
+  const [flatViewSubmission, setFlatViewSubmission] = React.useState<{
+    query: string;
+    version: number;
+  } | null>(null);
+  const submitFlatViewQuery = React.useCallback((query: string) => {
+    setFlatViewSubmission((prev) => ({
+      query,
+      version: (prev?.version ?? 0) + 1,
+    }));
+  }, []);
+
   const value = React.useMemo<ProjectContextValue>(
     () => ({
       project,
@@ -191,6 +217,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       openInitDialog,
       initDialog,
       closeInitDialog,
+      submitFlatViewQuery,
+      flatViewSubmission,
     }),
     [
       project,
@@ -208,6 +236,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       openInitDialog,
       initDialog,
       closeInitDialog,
+      submitFlatViewQuery,
+      flatViewSubmission,
     ],
   );
 
