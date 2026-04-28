@@ -45,7 +45,7 @@ export type HitsColumnId = "path" | "tags" | "violations" | "kind" | "ext";
  */
 export function HitsDataTable(props: {
   hits: RichSearchHit[];
-  onPick?: (hit: RichSearchHit) => void;
+  onPick: ((hit: RichSearchHit) => void) | undefined;
   sorting: SortingState;
   onSortingChange: (next: SortingState) => void;
   columnVisibility: VisibilityState;

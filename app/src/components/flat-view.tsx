@@ -1,5 +1,15 @@
 import * as React from "react";
-import { LayoutGrid, List as ListIcon, Save, Trash2, FileIcon, X } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  FileIcon,
+  LayoutGrid,
+  List as ListIcon,
+  Save,
+  Trash2,
+  X,
+} from "lucide-react";
+import type { SortingState, VisibilityState } from "@tanstack/react-table";
 
 import {
   IpcError,
@@ -35,8 +45,44 @@ import {
 } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ViolationBadges } from "@/components/violation-badges";
+import {
+  ColumnVisibilityMenu,
+  HitsDataTable,
+  type HitsColumnId,
+} from "@/components/hits-data-table";
 
 const DEBOUNCE_MS = 200;
+const COLUMN_VISIBILITY_KEY = "progest:flatview-columns";
+const SORTING_KEY = "progest:flatview-sorting";
+
+const DEFAULT_COLUMN_VISIBILITY: VisibilityState = {
+  path: true,
+  tags: true,
+  violations: true,
+  kind: false,
+  ext: false,
+};
+
+function loadColumnVisibility(): VisibilityState {
+  try {
+    const raw = localStorage.getItem(COLUMN_VISIBILITY_KEY);
+    if (!raw) return DEFAULT_COLUMN_VISIBILITY;
+    const parsed = JSON.parse(raw) as VisibilityState;
+    return { ...DEFAULT_COLUMN_VISIBILITY, ...parsed };
+  } catch {
+    return DEFAULT_COLUMN_VISIBILITY;
+  }
+}
+
+function loadSorting(): SortingState {
+  try {
+    const raw = localStorage.getItem(SORTING_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as SortingState;
+  } catch {
+    return [];
+  }
+}
 
 export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
   const { project, refreshTick, flatViewSubmission } = useProject();
@@ -49,6 +95,29 @@ export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
   const [views, setViews] = React.useState<View[]>([]);
   const [activeViewId, setActiveViewId] = React.useState<string | null>(null);
   const [saveOpen, setSaveOpen] = React.useState(false);
+  // Sort + column visibility live here so list (DataTable) and grid
+  // share the same sort, and column visibility is persisted across
+  // sessions. Saved views intentionally don't include this state —
+  // it's UI preference, not a query.
+  const [sorting, setSorting] = React.useState<SortingState>(() => loadSorting());
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>(() =>
+    loadColumnVisibility(),
+  );
+  React.useEffect(() => {
+    localStorage.setItem(SORTING_KEY, JSON.stringify(sorting));
+  }, [sorting]);
+  React.useEffect(() => {
+    localStorage.setItem(COLUMN_VISIBILITY_KEY, JSON.stringify(columnVisibility));
+  }, [columnVisibility]);
+
+  // Apply the sort to the hit list once. Both render paths (DataTable
+  // and grid) consume `sortedHits`; the DataTable still receives
+  // `sorting` so its header arrows reflect state, but its internal
+  // `getSortedRowModel` becomes a no-op on already-sorted data.
+  const sortedHits = React.useMemo(
+    () => sortHits(response?.hits ?? [], sorting),
+    [response, sorting],
+  );
 
   // Mirror project-level state onto the FlatView summary context so
   // <StatusBar> can render the active view + aggregate violation
@@ -241,6 +310,14 @@ export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
         </div>
         <ViewSelect views={views} active={activeViewId} onSelect={onSelectView} />
         <DisplayToggle value={display} onChange={setDisplay} />
+        {display === "grid" ? (
+          <GridSortControls sorting={sorting} onSortingChange={setSorting} />
+        ) : (
+          <ColumnVisibilityMenu
+            columnVisibility={columnVisibility}
+            onColumnVisibilityChange={setColumnVisibility}
+          />
+        )}
         <div className="ml-auto flex items-center gap-1">
           {activeViewId ? (
             <Button
@@ -289,9 +366,16 @@ export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
       <div className="flex-1 overflow-auto">
         {response && !response.parse_error ? (
           display === "list" ? (
-            <HitList hits={response.hits} onPick={props.onPickHit} />
+            <HitsDataTable
+              hits={sortedHits}
+              onPick={props.onPickHit}
+              sorting={sorting}
+              onSortingChange={setSorting}
+              columnVisibility={columnVisibility}
+              onColumnVisibilityChange={setColumnVisibility}
+            />
           ) : (
-            <HitGrid hits={response.hits} onPick={props.onPickHit} />
+            <HitGrid hits={sortedHits} onPick={props.onPickHit} />
           )
         ) : null}
       </div>
@@ -370,32 +454,99 @@ function DisplayToggle(props: { value: ViewDisplay; onChange: (v: ViewDisplay) =
   );
 }
 
-function HitList(props: {
-  hits: RichSearchHit[];
-  onPick: ((hit: RichSearchHit) => void) | undefined;
+/**
+ * Apply the user's sort selection to a hit list. Mirrors the
+ * `sortingFn`s in `HitsDataTable` so the grid render path agrees
+ * with the table when the user toggles between display modes.
+ *
+ * Empty `sorting` keeps server / DSL order untouched.
+ */
+function sortHits(hits: RichSearchHit[], sorting: SortingState): RichSearchHit[] {
+  if (sorting.length === 0 || !sorting[0]) return hits;
+  const { id, desc } = sorting[0];
+  const col = id as HitsColumnId;
+  const sorted = [...hits].sort((a, b) => compareHits(a, b, col));
+  return desc ? sorted.reverse() : sorted;
+}
+
+function compareHits(a: RichSearchHit, b: RichSearchHit, col: HitsColumnId): number {
+  switch (col) {
+    case "path":
+      return a.path.localeCompare(b.path);
+    case "tags":
+      return a.tags.join(" ").localeCompare(b.tags.join(" "));
+    case "violations": {
+      const av = a.violations.naming + a.violations.placement + a.violations.sequence;
+      const bv = b.violations.naming + b.violations.placement + b.violations.sequence;
+      return av - bv;
+    }
+    case "kind":
+      return a.kind.localeCompare(b.kind);
+    case "ext":
+      return (a.ext ?? "").localeCompare(b.ext ?? "");
+  }
+}
+
+const SORT_LABELS: Record<HitsColumnId, string> = {
+  path: "Path",
+  tags: "Tags",
+  violations: "Violations",
+  kind: "Kind",
+  ext: "Extension",
+};
+const SORT_KEYS: HitsColumnId[] = ["path", "tags", "violations", "kind", "ext"];
+const UNSORTED = "__unsorted__";
+
+/** Toolbar control for grid mode — pairs a column Select with an
+ *  asc/desc toggle. Writes back into the same `sorting` state the
+ *  DataTable consumes, so swapping display modes preserves the order. */
+function GridSortControls(props: {
+  sorting: SortingState;
+  onSortingChange: (next: SortingState) => void;
 }) {
-  if (props.hits.length === 0) return <Empty>No results.</Empty>;
+  const current = props.sorting[0];
+  const value = current ? current.id : UNSORTED;
+  const desc = current?.desc ?? false;
+
+  const onPickColumn = (next: string) => {
+    if (next === UNSORTED) {
+      props.onSortingChange([]);
+      return;
+    }
+    props.onSortingChange([{ id: next, desc }]);
+  };
+  const onToggleDirection = () => {
+    if (!current) return;
+    props.onSortingChange([{ id: current.id, desc: !current.desc }]);
+  };
+
   return (
-    <ul className="divide-y">
-      {props.hits.map((hit) => (
-        <li key={hit.file_id}>
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 px-3 py-1.5 text-xs hover:bg-accent"
-            onClick={() => props.onPick?.(hit)}
-          >
-            <FileIcon className="size-3.5 opacity-60" />
-            <span className="truncate font-mono">{hit.path}</span>
-            {hit.tags.length > 0 ? (
-              <span className="shrink-0 truncate text-[0.625rem] text-muted-foreground">
-                {hit.tags.map((t) => `#${t}`).join(" ")}
-              </span>
-            ) : null}
-            <ViolationBadges counts={hit.violations} />
-          </button>
-        </li>
-      ))}
-    </ul>
+    <div className="flex items-center gap-1">
+      <Select value={value} onValueChange={onPickColumn}>
+        <SelectTrigger size="sm" className="h-8 min-w-32 text-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={UNSORTED}>— unsorted —</SelectItem>
+          {SORT_KEYS.map((id) => (
+            <SelectItem key={id} value={id}>
+              {SORT_LABELS[id]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        variant="outline"
+        size="sm"
+        className="h-8 px-2"
+        onClick={onToggleDirection}
+        disabled={!current}
+        title={desc ? "Descending — click for ascending" : "Ascending — click for descending"}
+        aria-label="Toggle sort direction"
+      >
+        {desc ? <ArrowDown className="size-3.5" /> : <ArrowUp className="size-3.5" />}
+      </Button>
+    </div>
   );
 }
 
