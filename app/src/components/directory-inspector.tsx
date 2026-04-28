@@ -24,6 +24,7 @@ import {
   CommandGroup,
   CommandItem,
   CommandList,
+  CommandShortcut,
 } from "@/components/ui/command";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
@@ -483,9 +484,7 @@ function ExtsEditor(props: {
                   onSelect={() => add({ type: "ext", value: "" })}
                 >
                   <span>(no extension)</span>
-                  <span className="ml-auto text-[0.625rem] text-muted-foreground">
-                    files without an extension
-                  </span>
+                  <CommandShortcut>files without an extension</CommandShortcut>
                 </CommandItem>
               </CommandGroup>
 
@@ -508,9 +507,9 @@ function ExtsEditor(props: {
                             </span>
                           )}
                         </span>
-                        <span className="ml-auto text-[0.625rem] text-muted-foreground">
+                        <CommandShortcut>
                           {a.exts.length} ext{a.exts.length === 1 ? "" : "s"}
-                        </span>
+                        </CommandShortcut>
                       </CommandItem>
                     );
                   })}
@@ -526,9 +525,7 @@ function ExtsEditor(props: {
                       onSelect={() => add({ type: "ext", value: e.ext })}
                     >
                       <span>.{e.ext}</span>
-                      <span className="ml-auto text-[0.625rem] text-muted-foreground">
-                        {e.count}
-                      </span>
+                      <CommandShortcut>{e.count}</CommandShortcut>
                     </CommandItem>
                   ))}
                 </CommandGroup>
