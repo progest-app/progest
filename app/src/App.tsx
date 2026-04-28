@@ -2,12 +2,14 @@ import * as React from "react";
 import { FolderOpen } from "lucide-react";
 
 import { CommandPalette } from "@/components/command-palette";
+import { DirectoryInspector } from "@/components/directory-inspector";
 import { TreeView } from "@/components/tree-view";
 import { FlatView } from "@/components/flat-view";
 import { ResultDetailDialog } from "@/components/result-detail-dialog";
 import { StatusBar } from "@/components/status-bar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { FlatViewSummaryProvider } from "@/lib/flat-view-context";
 import { ProjectProvider, useProject } from "@/lib/project-context";
@@ -43,11 +45,27 @@ function Shell() {
   // inspect a file without losing their place in the tree.
   const [hitDetail, setHitDetail] = React.useState<RichSearchHit | null>(null);
   const [treeDetail, setTreeDetail] = React.useState<DirEntry | null>(null);
+  // The tree's currently-selected directory feeds the right-pane
+  // inspector. Default to the project root so the inspector always has
+  // something to render.
+  const [selectedDir, setSelectedDir] = React.useState<string>("");
+
+  // Reset selection when the user swaps projects — otherwise the
+  // inspector keeps trying to read accepts for a dir that may not
+  // exist in the new project.
+  React.useEffect(() => {
+    setSelectedDir("");
+  }, [project?.root]);
 
   return (
     <>
       {project ? (
-        <MainShell onPickHit={(h) => setHitDetail(h)} onPickTreeFile={(e) => setTreeDetail(e)} />
+        <MainShell
+          onPickHit={(h) => setHitDetail(h)}
+          onPickTreeFile={(e) => setTreeDetail(e)}
+          selectedDir={selectedDir}
+          onSelectDir={setSelectedDir}
+        />
       ) : (
         <Welcome />
       )}
@@ -77,17 +95,36 @@ function Shell() {
 function MainShell(props: {
   onPickHit: (hit: RichSearchHit) => void;
   onPickTreeFile: (entry: DirEntry) => void;
+  selectedDir: string;
+  onSelectDir: (path: string) => void;
 }) {
   return (
     <div className="grid h-screen grid-rows-[auto_1fr_auto] bg-background">
       <TopBar />
-      <div className="grid grid-cols-[260px_1fr] overflow-hidden border-t">
-        <aside className="overflow-hidden border-r">
-          <TreeView onPickFile={props.onPickTreeFile} />
-        </aside>
-        <main className="overflow-hidden">
-          <FlatView onPickHit={props.onPickHit} />
-        </main>
+      <div className="overflow-hidden border-t">
+        <ResizablePanelGroup orientation="horizontal" id="progest:main-shell" className="h-full">
+          <ResizablePanel defaultSize={22} minSize={12}>
+            <aside className="h-full overflow-hidden">
+              <TreeView
+                onPickFile={props.onPickTreeFile}
+                selectedDir={props.selectedDir}
+                onSelectDir={props.onSelectDir}
+              />
+            </aside>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={40} minSize={20}>
+            <main className="h-full overflow-hidden">
+              <FlatView onPickHit={props.onPickHit} />
+            </main>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel defaultSize={38} minSize={20}>
+            <aside className="h-full overflow-hidden">
+              <DirectoryInspector dir={props.selectedDir} />
+            </aside>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
       <StatusBar />
     </div>

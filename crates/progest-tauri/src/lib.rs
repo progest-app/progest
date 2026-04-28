@@ -4,7 +4,9 @@
 //! Tauri commands that the React frontend calls. Business logic does
 //! not live here.
 
+mod accepts_commands;
 mod commands;
+mod lint_commands;
 mod recent;
 mod state;
 
@@ -56,6 +58,9 @@ pub fn run() {
             commands::view_delete,
             commands::files_list_dir,
             commands::files_list_all,
+            accepts_commands::accepts_read,
+            accepts_commands::accepts_write,
+            lint_commands::lint_run,
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())

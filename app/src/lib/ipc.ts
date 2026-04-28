@@ -204,3 +204,81 @@ export async function filesListAll(): Promise<RichSearchHit[]> {
     throw toIpcError(e);
   }
 }
+
+// --- accepts (directory inspector) ----------------------------------------
+
+// Tagged-union mirror of `AcceptsTokenWire` in
+// crates/progest-tauri/src/accepts_commands.rs. The backend serializes
+// with `#[serde(tag = "type", rename_all = "lowercase")]`.
+export type AcceptsToken = { type: "alias"; name: string } | { type: "ext"; value: string };
+
+export type AcceptsMode = "strict" | "warn" | "hint" | "off";
+
+export type RawAccepts = {
+  inherit: boolean;
+  exts: AcceptsToken[];
+  mode: AcceptsMode;
+};
+
+export type EffectiveExt = {
+  ext: string;
+  source: "own" | "inherited";
+};
+
+export type EffectiveAccepts = {
+  exts: EffectiveExt[];
+  mode: AcceptsMode;
+};
+
+export type ChainEntry = {
+  dir: string;
+  accepts: RawAccepts;
+};
+
+export type AliasEntry = {
+  name: string;
+  exts: string[];
+  builtin: boolean;
+};
+
+export type AcceptsReadResponse = {
+  dir: string;
+  own: RawAccepts | null;
+  effective: EffectiveAccepts | null;
+  chain: ChainEntry[];
+  aliases: AliasEntry[];
+  warnings: string[];
+};
+
+export async function acceptsRead(dir: string): Promise<AcceptsReadResponse> {
+  try {
+    return await invoke<AcceptsReadResponse>("accepts_read", { dir });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function acceptsWrite(dir: string, accepts: RawAccepts | null): Promise<void> {
+  try {
+    await invoke<void>("accepts_write", { dir, accepts });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+// --- lint refresh ----------------------------------------------------------
+
+export type LintRunResponse = {
+  naming: number;
+  placement: number;
+  sequence: number;
+  scanned: number;
+};
+
+export async function lintRun(): Promise<LintRunResponse> {
+  try {
+    return await invoke<LintRunResponse>("lint_run");
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
