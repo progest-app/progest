@@ -194,12 +194,10 @@ pub fn search_execute(query: String, state: State<'_, AppState>) -> Result<Searc
 
     let warnings: Vec<String> = validated.warnings.iter().map(ToString::to_string).collect();
 
-    // Successful executions auto-record into the recent-query log.
-    // Logging is best-effort: a write failure should not turn a
-    // good search into a UI error.
-    if let Err(e) = record_history(ctx, &query) {
-        tracing::warn!("could not append to search history: {e}");
-    }
+    // Search history is no longer auto-recorded here — debounced
+    // keystrokes from the palette would otherwise pollute the recent
+    // list. The frontend calls `search_history_record` explicitly when
+    // the user commits a query (Enter key).
 
     Ok(SearchResponse {
         query,
@@ -207,6 +205,22 @@ pub fn search_execute(query: String, state: State<'_, AppState>) -> Result<Searc
         warnings,
         parse_error: None,
     })
+}
+
+/// Append `query` to `.progest/local/search-history.json`. Called by
+/// the frontend on explicit user commit (Enter in the palette) so the
+/// recent-query log only contains queries the user intended to keep.
+/// Empty / whitespace-only queries are no-ops (history dedup also
+/// drops them, this just avoids the round-trip).
+#[tauri::command]
+#[allow(clippy::needless_pass_by_value)]
+pub fn search_history_record(query: String, state: State<'_, AppState>) -> Result<(), String> {
+    if query.trim().is_empty() {
+        return Ok(());
+    }
+    let guard = state.project.lock().expect("project mutex poisoned");
+    let ctx = guard.as_ref().ok_or_else(no_project_error)?;
+    record_history(ctx, &query)
 }
 
 #[tauri::command]

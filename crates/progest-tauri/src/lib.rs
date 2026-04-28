@@ -54,6 +54,7 @@ pub fn run() {
             commands::search_execute,
             commands::search_history_list,
             commands::search_history_clear,
+            commands::search_history_record,
             commands::view_list,
             commands::view_save,
             commands::view_delete,
