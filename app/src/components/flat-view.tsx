@@ -213,7 +213,7 @@ export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
               }
             }}
             placeholder="tag:wip type:psd is:violation …  (Esc to clear)"
-            className="h-8 pr-7 text-xs"
+            className={`h-8 text-xs ${query.length > 0 ? "pr-7" : ""}`}
           />
           {query.length > 0 ? (
             <button
