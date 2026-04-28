@@ -138,6 +138,23 @@
   }
   body {
     @apply bg-background text-foreground;
+    /*
+     * Default to native-app selection behavior: chrome and labels
+     * aren't selectable, but anything that looks like content
+     * (file paths, error text, result rows) opts in via the
+     * `select-text` Tailwind utility. Form controls stay selectable
+     * via the override below so users can still edit / copy from
+     * inputs and textareas.
+     */
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input,
+  textarea,
+  [contenteditable="true"],
+  [contenteditable=""] {
+    -webkit-user-select: auto;
+    user-select: auto;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
