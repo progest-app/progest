@@ -201,6 +201,43 @@ impl SqliteIndex {
     pub fn with_connection<R>(&self, f: impl FnOnce(&Connection) -> R) -> R {
         self.with_conn(f)
     }
+
+    /// Distinct file extensions present in the index, each paired with the
+    /// number of files carrying it. Extensions are normalized to the form
+    /// stored by reconcile (lowercase, no leading dot), and rows whose
+    /// `ext` is NULL are skipped — files without an extension surface
+    /// through the dedicated empty-token UX rather than this list. Result
+    /// is ordered by descending count so the combobox surfaces the most
+    /// common extensions first.
+    pub fn extensions_summary(&self) -> Result<Vec<ExtensionSummary>, IndexError> {
+        self.with_conn(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT ext, COUNT(*) AS n \
+                 FROM files \
+                 WHERE ext IS NOT NULL AND ext <> '' \
+                 GROUP BY ext \
+                 ORDER BY n DESC, ext ASC",
+            )?;
+            let rows = stmt.query_map([], |row| {
+                Ok(ExtensionSummary {
+                    ext: row.get::<_, String>(0)?,
+                    count: row.get::<_, i64>(1)?,
+                })
+            })?;
+            let mut out = Vec::new();
+            for r in rows {
+                out.push(r?);
+            }
+            Ok(out)
+        })
+    }
+}
+
+/// One row of [`SqliteIndex::extensions_summary`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExtensionSummary {
+    pub ext: String,
+    pub count: i64,
 }
 
 const UPSERT_SQL: &str = "\
@@ -788,6 +825,55 @@ mod tests {
 
         let tags = idx.list_tags_for_file(&row.file_id).unwrap();
         assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn extensions_summary_groups_and_sorts_by_count() {
+        let idx = SqliteIndex::open_in_memory().unwrap();
+
+        // Insert three files: two .psd, one .mov. Use the search-projection
+        // path so this also exercises the read path the UI sees.
+        for (path, ext) in [
+            ("a.psd", Some("psd")),
+            ("b.psd", Some("psd")),
+            ("c.mov", Some("mov")),
+            ("d.unknown", None),
+        ] {
+            let mut r = sample_row();
+            r.file_id = FileId::new_v7();
+            r.path = ProjectPath::new(path).unwrap();
+            idx.upsert_file(&r).unwrap();
+            idx.set_search_projection(
+                &r.file_id,
+                &SearchProjection {
+                    name: Some(path.into()),
+                    ext: ext.map(str::to_string),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+
+        let summary = idx.extensions_summary().unwrap();
+        assert_eq!(
+            summary,
+            vec![
+                ExtensionSummary {
+                    ext: "psd".into(),
+                    count: 2
+                },
+                ExtensionSummary {
+                    ext: "mov".into(),
+                    count: 1
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn extensions_summary_is_empty_for_empty_index() {
+        let idx = SqliteIndex::open_in_memory().unwrap();
+        assert!(idx.extensions_summary().unwrap().is_empty());
     }
 
     #[test]
