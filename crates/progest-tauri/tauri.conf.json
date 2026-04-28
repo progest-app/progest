@@ -11,15 +11,7 @@
   },
   "app": {
     "withGlobalTauri": false,
-    "windows": [
-      {
-        "title": "Progest",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 600
-      }
-    ],
+    "windows": [],
     "security": {
       "csp": null
     }

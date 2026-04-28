@@ -65,7 +65,9 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
     });
   }, []);
 
-  // Cmd+K / Ctrl+K toggle.
+  // Cmd+K / Ctrl+K toggle, and a programmatic toggle event so the
+  // titlebar button (and any other shell affordance) can open the
+  // palette without synthesizing keyboard events.
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === "k" && (e.metaKey || e.ctrlKey)) {
@@ -73,8 +75,13 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
         setOpen((v) => !v);
       }
     };
+    const onToggle = () => setOpen((v) => !v);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("progest:toggle-palette", onToggle);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("progest:toggle-palette", onToggle);
+    };
   }, []);
 
   const refreshHistory = React.useCallback(async () => {
