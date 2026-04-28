@@ -396,7 +396,7 @@ mod tests {
         assert_eq!(raw.exts.len(), 1);
         match &raw.exts[0] {
             AcceptsToken::Ext(e) => assert_eq!(e.as_str(), "psd"),
-            other => panic!("expected ext token, got {other:?}"),
+            AcceptsToken::Alias(name) => panic!("expected ext token, got alias `:{name}`"),
         }
     }
 

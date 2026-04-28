@@ -6,6 +6,7 @@
 
 mod accepts_commands;
 mod commands;
+mod lint_commands;
 mod recent;
 mod state;
 
@@ -59,6 +60,7 @@ pub fn run() {
             commands::files_list_all,
             accepts_commands::accepts_read,
             accepts_commands::accepts_write,
+            lint_commands::lint_run,
         ])
         .setup(|_app| Ok(()))
         .run(tauri::generate_context!())
