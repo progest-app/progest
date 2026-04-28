@@ -9,7 +9,7 @@ Cmd+K でコマンドパレット起動。2 モード:
 
 `>` を入力するとコマンドモード、削除すると検索モードに戻る。
 
-最終更新: 2026-04-27（初版、`>` プレフィックス + Project / Theme コマンド初期セット）
+最終更新: 2026-04-28（Project に `New project…` / `Initialize existing folder…` 追加）
 
 ---
 
@@ -22,6 +22,8 @@ Cmd+K でコマンドパレット起動。2 モード:
 | Title | Hint | 動作 |
 | --- | --- | --- |
 | `Open project…` | `folder picker` | Tauri folder picker → `project_open(path)` → AppState 差替え |
+| `New project…` | `create a fresh folder` | `<InitProjectDialog>` を `mode="new"` で開く。親ディレクトリ + 名前から `project_init_new` |
+| `Initialize existing folder…` | `init in place` | `<InitProjectDialog>` を `mode="existing"` で開く。`project_init_existing`、preview で予測ファイル数を表示 |
 | `Open recent: <name>` | `<absolute path>` | recent project エントリを即時 attach（ピッカー不要）。recent ごとに動的生成、`pickRecent(entry)` 経由 |
 
 ### 1.2 Theme（`useThemeCommands`）

@@ -4,9 +4,12 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import {
   appInfo,
   IpcError,
+  projectInitExisting,
+  projectInitNew,
   projectOpen,
   projectRecentClear,
   projectRecentList,
+  type InitResult,
   type ProjectInfo,
   type RecentProject,
 } from "@/lib/ipc";
@@ -32,7 +35,22 @@ type ProjectContextValue = {
   refreshTick: number;
   /** Bump [`refreshTick`]. */
   bumpRefresh: () => void;
+  /** Open a project at `path` directly (skips the picker). Used by the
+   *  init dialog when preview detects an existing `.progest/`. */
+  openByPath: (path: string) => Promise<void>;
+  /** Initialize a brand-new project (mkdir parent/name + init + scan). */
+  initNew: (parent: string, name: string) => Promise<InitResult>;
+  /** Initialize at an existing directory (init + scan). */
+  initExisting: (path: string, name: string | null) => Promise<InitResult>;
+  /** Open the create-project dialog from anywhere in the app. */
+  openInitDialog: (mode: InitDialogMode) => void;
+  /** Dialog open state, consumed by the dialog component. */
+  initDialog: { open: boolean; mode: InitDialogMode };
+  /** Dialog close handler. */
+  closeInitDialog: () => void;
 };
+
+export type InitDialogMode = "new" | "existing";
 
 const Ctx = React.createContext<ProjectContextValue | null>(null);
 
@@ -113,6 +131,49 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const openByPath = React.useCallback(
+    async (path: string) => {
+      await attach(path);
+    },
+    [attach],
+  );
+
+  // Init helpers do *not* swallow errors: the dialog wants to render
+  // them inline next to the form fields. They still update the context
+  // (project + recent) on success so callers don't need to refresh.
+  const initNew = React.useCallback(
+    async (parent: string, name: string) => {
+      const result = await projectInitNew(parent, name);
+      setProject(result.project);
+      setError(null);
+      await refreshRecent();
+      return result;
+    },
+    [refreshRecent],
+  );
+
+  const initExisting = React.useCallback(
+    async (path: string, name: string | null) => {
+      const result = await projectInitExisting(path, name);
+      setProject(result.project);
+      setError(null);
+      await refreshRecent();
+      return result;
+    },
+    [refreshRecent],
+  );
+
+  const [initDialog, setInitDialog] = React.useState<{
+    open: boolean;
+    mode: InitDialogMode;
+  }>({ open: false, mode: "new" });
+  const openInitDialog = React.useCallback((mode: InitDialogMode) => {
+    setInitDialog({ open: true, mode });
+  }, []);
+  const closeInitDialog = React.useCallback(() => {
+    setInitDialog((d) => ({ ...d, open: false }));
+  }, []);
+
   const value = React.useMemo<ProjectContextValue>(
     () => ({
       project,
@@ -124,6 +185,12 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       clearRecent,
       refreshTick,
       bumpRefresh,
+      openByPath,
+      initNew,
+      initExisting,
+      openInitDialog,
+      initDialog,
+      closeInitDialog,
     }),
     [
       project,
@@ -135,6 +202,12 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       clearRecent,
       refreshTick,
       bumpRefresh,
+      openByPath,
+      initNew,
+      initExisting,
+      openInitDialog,
+      initDialog,
+      closeInitDialog,
     ],
   );
 
