@@ -395,7 +395,7 @@ function HitGrid(props: {
   return (
     <div
       className="grid gap-2 p-3"
-      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))" }}
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}
     >
       {props.hits.map((hit) => (
         <button
@@ -405,7 +405,7 @@ function HitGrid(props: {
           onClick={() => props.onPick?.(hit)}
         >
           <div className="flex aspect-square items-center justify-center rounded bg-muted/40">
-            <FileIcon className="size-8 opacity-50" />
+            <FileIcon className="size-10 opacity-50" />
           </div>
           <div className="truncate text-xs font-mono" title={hit.path}>
             {hit.name ?? hit.path.split("/").pop()}
