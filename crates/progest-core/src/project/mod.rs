@@ -19,6 +19,7 @@
 
 pub mod document;
 pub mod layout;
+pub mod preview;
 pub mod root;
 
 pub use document::{ProjectDocument, ProjectError, ProjectId};
@@ -27,4 +28,5 @@ pub use layout::{
     PROJECT_TOML_FILENAME, RULES_TOML_FILENAME, SCHEMA_TOML_FILENAME, SEARCH_HISTORY_FILENAME,
     THUMBS_DIR, USER_IGNORE_FILENAME, VIEWS_TOML_FILENAME, initialize,
 };
+pub use preview::{INIT_ARTIFACTS, InitPreview, preview_init};
 pub use root::ProjectRoot;
