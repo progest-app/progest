@@ -6,6 +6,7 @@
 
 mod accepts_commands;
 mod commands;
+mod file_inspector_commands;
 mod lint_commands;
 mod project_init_commands;
 mod recent;
@@ -67,6 +68,10 @@ pub fn run() {
             project_init_commands::project_init_preview,
             project_init_commands::project_init_new,
             project_init_commands::project_init_existing,
+            file_inspector_commands::tag_add,
+            file_inspector_commands::tag_remove,
+            file_inspector_commands::notes_read,
+            file_inspector_commands::notes_write,
         ])
         .setup(|app| {
             // We build the main window programmatically rather than via
