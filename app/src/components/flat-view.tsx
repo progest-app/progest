@@ -257,7 +257,7 @@ export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
       <div className="flex items-center gap-3 border-b px-3 py-1 text-[0.625rem]">
         {loading ? <span className="text-muted-foreground">searching…</span> : null}
         {response?.parse_error ? (
-          <span className="text-destructive" title={response.parse_error.message}>
+          <span className="select-text text-destructive" title={response.parse_error.message}>
             parse error: {response.parse_error.message}
           </span>
         ) : null}
@@ -267,7 +267,7 @@ export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
             {response.warnings.length === 1 ? "" : "s"}: {response.warnings.join("; ")}
           </span>
         ) : null}
-        {error ? <span className="text-destructive">{error}</span> : null}
+        {error ? <span className="select-text text-destructive">{error}</span> : null}
         {response && !response.parse_error ? (
           <span className="ml-auto text-muted-foreground">
             {response.hits.length} hit{response.hits.length === 1 ? "" : "s"}
@@ -520,7 +520,7 @@ function SaveAsDialog(props: {
               className="text-xs"
             />
           </Field>
-          {error ? <div className="text-destructive">{error}</div> : null}
+          {error ? <div className="select-text text-destructive">{error}</div> : null}
         </div>
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>

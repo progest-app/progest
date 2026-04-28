@@ -17,7 +17,9 @@ export function ResultDetailDialog(props: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle className="font-mono text-sm break-all">{hit?.path ?? ""}</DialogTitle>
+          <DialogTitle className="select-text font-mono text-sm break-all">
+            {hit?.path ?? ""}
+          </DialogTitle>
           <DialogDescription>{hit?.kind ?? ""}</DialogDescription>
         </DialogHeader>
         {hit ? <Detail hit={hit} /> : null}
@@ -28,7 +30,7 @@ export function ResultDetailDialog(props: {
 
 function Detail({ hit }: { hit: RichSearchHit }) {
   return (
-    <div className="grid gap-3 text-xs">
+    <div className="grid select-text gap-3 text-xs">
       <Row label="file_id" value={hit.file_id} />
       {hit.name ? <Row label="name" value={hit.name} /> : null}
       {hit.ext ? <Row label="ext" value={hit.ext} /> : null}

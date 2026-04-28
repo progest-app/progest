@@ -356,7 +356,9 @@ function SearchBody(props: {
   if (response.parse_error) {
     return (
       <CommandEmpty>
-        <div className="text-destructive">Parse error: {response.parse_error.message}</div>
+        <div className="select-text text-destructive">
+          Parse error: {response.parse_error.message}
+        </div>
       </CommandEmpty>
     );
   }
@@ -412,7 +414,7 @@ function PaletteStatus(props: {
   }
   if (error) {
     lines.push(
-      <span key="err" className="text-destructive">
+      <span key="err" className="select-text text-destructive">
         {error}
       </span>,
     );

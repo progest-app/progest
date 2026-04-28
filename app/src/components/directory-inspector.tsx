@@ -129,7 +129,7 @@ export function DirectoryInspector(props: { dir: string }) {
       <header className="flex items-center gap-2 border-b px-3 py-2">
         <div className="min-w-0 flex-1">
           <div className="text-muted-foreground">Directory</div>
-          <div className="truncate font-medium" title={dir || "(root)"}>
+          <div className="select-text truncate font-medium" title={dir || "(root)"}>
             {dir === "" ? "(project root)" : dir}
           </div>
         </div>
@@ -147,7 +147,7 @@ export function DirectoryInspector(props: { dir: string }) {
       <div className="flex-1 overflow-auto">
         {loading && !data ? <div className="p-3 text-muted-foreground">Loading…</div> : null}
         {error ? (
-          <div className="m-3 rounded border border-destructive/40 bg-destructive/5 p-2 text-destructive">
+          <div className="m-3 select-text rounded border border-destructive/40 bg-destructive/5 p-2 text-destructive">
             {error}
           </div>
         ) : null}
