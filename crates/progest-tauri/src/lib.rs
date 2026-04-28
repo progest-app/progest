@@ -7,6 +7,7 @@
 mod accepts_commands;
 mod commands;
 mod lint_commands;
+mod project_init_commands;
 mod recent;
 mod state;
 
@@ -62,6 +63,9 @@ pub fn run() {
             accepts_commands::accepts_read,
             accepts_commands::accepts_write,
             lint_commands::lint_run,
+            project_init_commands::project_init_preview,
+            project_init_commands::project_init_new,
+            project_init_commands::project_init_existing,
         ])
         .setup(|app| {
             // We build the main window programmatically rather than via
