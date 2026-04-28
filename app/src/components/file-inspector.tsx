@@ -60,7 +60,11 @@ function FileSummary(props: { hit: RichSearchHit }) {
       {hit.ext ? <Row label="Extension" value={hit.ext} mono /> : null}
       <div className="grid grid-cols-[5.5rem_1fr] items-start gap-2">
         <span className="text-muted-foreground">Violations</span>
-        <ViolationBadges counts={hit.violations} />
+        {hit.violations.naming + hit.violations.placement + hit.violations.sequence > 0 ? (
+          <ViolationBadges counts={hit.violations} className="" />
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
       </div>
       {hit.file_id ? (
         <Row label="File ID" value={hit.file_id} mono className="text-muted-foreground" />
@@ -87,31 +91,48 @@ function TagsEditor(props: { hit: RichSearchHit; disabled: boolean }) {
   const [draft, setDraft] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  // Tracks the tag string for any in-flight `tagAdd` call. Prevents
+  // double-fire when Enter and onBlur land back-to-back (the input
+  // can blur right after Enter, queueing a second submission with
+  // the same draft before React commits the first `setDraft("")`).
+  const pendingAdd = React.useRef<string | null>(null);
 
   // Reset to the upstream value whenever the inspector switches files.
   React.useEffect(() => {
     setTags(hit.tags);
     setDraft("");
     setError(null);
+    pendingAdd.current = null;
   }, [hit.file_id, hit.path, hit.tags]);
 
   const submitDraft = async () => {
     const tag = draft.trim();
-    if (tag.length === 0 || tags.includes(tag)) {
-      setDraft("");
+    // Early-out paths that don't need the IPC round-trip. Critically,
+    // `pendingAdd.current === tag` guards against the Enter→blur race.
+    if (tag.length === 0 || tags.includes(tag) || pendingAdd.current === tag || disabled) {
+      if (tag.length === 0 || tags.includes(tag)) setDraft("");
       return;
     }
-    if (disabled) return;
+    pendingAdd.current = tag;
+    setDraft("");
     setBusy(true);
     setError(null);
     try {
       await tagAdd(hit.file_id, tag);
-      setTags((prev) => [...prev, tag].sort((a, b) => a.localeCompare(b)));
-      setDraft("");
+      // Dedupe at insertion time too — the backend is idempotent, but
+      // the optimistic update would otherwise let two concurrent
+      // submissions of the same tag append twice.
+      setTags((prev) => {
+        if (prev.includes(tag)) return prev;
+        const next = [...prev, tag];
+        next.sort((a, b) => a.localeCompare(b));
+        return next;
+      });
       bumpRefresh();
     } catch (e) {
       setError(e instanceof IpcError ? e.raw : String(e));
     } finally {
+      pendingAdd.current = null;
       setBusy(false);
     }
   };
