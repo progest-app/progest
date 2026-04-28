@@ -532,7 +532,7 @@
 - macOS でトラフィックライト（赤/黄/緑）を残しつつ webview を窓いっぱいに広げたい時の正しい組み合わせ。`tauri.conf.json` の `windows[].titleBarStyle` を `"Overlay"`、`hiddenTitle` を `true` に。`decorations: false` は traffic lights ごと消えてしまうので NG（macOS-first の v1.0 ではユーザー期待を裏切る）
 - traffic lights は webview 上にオーバーレイされるので、左 80px 程度の **`pl-[80px]`** をリザーブしないと最初のコンテンツがボタンに被る。Windows / Linux ではそのまま無害な左パディング（v1.1 で platform-aware に置換予定）
 - **`data-tauri-drag-region` は子孫に伝播しない** — その属性が付いた**まさにその要素だけ**がドラッグハンドルになる。flex / grid コンテナを入れ子にすると、外側の親に属性を付けただけだと内側の子コンテナの "ボタン同士の隙間" は dead zone になる
-- **解決はグローバル CSS で `-webkit-app-region: drag` を子孫まで広げる**。macOS WKWebView は Electron 同様 `-webkit-app-region` を解釈するので、`[data-tauri-drag-region], [data-tauri-drag-region] * { -webkit-app-region: drag; }` と書けば titlebar 内の空きスペース全部が draggable になる。インタラクティブ要素（button / input / [role="button"] 等）は同じ CSS で `no-drag` に opt-out させる
+- **解決はグローバル CSS で `app-region: drag` を子孫まで広げる**。macOS WKWebView は標準化された `app-region` プロパティと旧 `-webkit-app-region` の両方を解釈するので、`[data-tauri-drag-region], [data-tauri-drag-region] * { app-region: drag; -webkit-app-region: drag; }` と両方書いておくのが安全。これで titlebar 内の空きスペース全部が draggable になる。インタラクティブ要素（button / input / [role="button"] 等）は同じ CSS で `no-drag` に opt-out させる
 - 場所: `app/src/index.css` の `@layer base` ブロック（drag / no-drag セレクタ）
 - レイアウトは `grid grid-cols-[1fr_auto_1fr]` の 3 カラムに揃えると左クラスタ幅が変わっても中央コンテンツ（検索バー等）が物理中央に固定される。flex + `ml-auto` だと左クラスタが広がった時に中央がズレる
 - 場所: `crates/progest-tauri/tauri.conf.json`、`app/src/components/title-bar.tsx`、`docs/CLAUDE.md` の「避けるべきこと」にも追記済み

@@ -151,13 +151,15 @@
    * Window drag region. Tauri v2's data-tauri-drag-region attribute
    * only matches the exact event target, so a parent attribute alone
    * doesn't make nested empty space draggable. macOS WKWebView
-   * supports the same -webkit-app-region CSS that Electron uses, so
-   * we set drag on every descendant of a drag region and explicitly
-   * opt interactive elements out. End result: clicking anywhere
-   * inside the titlebar that isn't a button / input drags the window.
+   * supports the CSS app-region property (and the -webkit- prefix
+   * for older builds), so we set drag on every descendant of a drag
+   * region and explicitly opt interactive elements out. End result:
+   * clicking anywhere inside the titlebar that isn't a button /
+   * input drags the window.
    */
   [data-tauri-drag-region],
   [data-tauri-drag-region] * {
+    app-region: drag;
     -webkit-app-region: drag;
   }
   [data-tauri-drag-region] button,
@@ -166,6 +168,7 @@
   [data-tauri-drag-region] textarea,
   [data-tauri-drag-region] a,
   [data-tauri-drag-region] [role="button"] {
+    app-region: no-drag;
     -webkit-app-region: no-drag;
   }
 }
