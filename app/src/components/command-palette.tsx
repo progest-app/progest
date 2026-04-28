@@ -17,6 +17,7 @@ import {
   searchExecute,
   searchHistoryClear,
   searchHistoryList,
+  searchHistoryRecord,
   type HistoryEntry,
   type RichSearchHit,
   type SearchResponse,
@@ -37,7 +38,8 @@ const COMMAND_PREFIX = ">";
 const SEARCH_DEBOUNCE_MS = 200;
 
 export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void }) {
-  const { project, recent, openPicker, pickRecent, clearRecent } = useProject();
+  const { project, recent, openPicker, pickRecent, clearRecent, submitFlatViewQuery } =
+    useProject();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
   const [response, setResponse] = React.useState<SearchResponse | null>(null);
@@ -144,6 +146,47 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
     }
   };
 
+  // Commit the typed query to the FlatView and record it as a history
+  // entry. Triggered by Enter on the input — see `onInputKeyDown`.
+  // Empty / whitespace-only queries are no-ops (no history pollution,
+  // no FlatView reset). The palette closes regardless so the user
+  // lands on the result panel.
+  const commitSearch = React.useCallback(() => {
+    const trimmed = query.trim();
+    if (trimmed.length === 0) return;
+    submitFlatViewQuery(trimmed);
+    void searchHistoryRecord(trimmed).catch((e) => {
+      // History persistence is best-effort — surface the failure in
+      // the status row but don't keep the palette open for it.
+      const msg = e instanceof IpcError ? e.raw : String(e);
+      setError(msg);
+    });
+    setOpen(false);
+    setQuery("");
+  }, [query, submitFlatViewQuery]);
+
+  // Intercept Enter at the input layer so the typed query commits to
+  // the FlatView instead of cmdk's default behavior (selecting the
+  // first highlighted result row). Result rows still respond to mouse
+  // clicks via `onPickHit`. Skipped in `>command` mode so cmdk's
+  // built-in command-execution path keeps working there.
+  const onInputKeyDown = React.useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key !== "Enter") return;
+      if (isCommandMode) return;
+      if (project === null) return;
+      if (query.trim().length === 0) return;
+      // cmdk's default Enter behavior selects the highlighted item.
+      // Block it at every layer (React + native) so the typed query
+      // commits to the FlatView instead of opening the first hit.
+      e.preventDefault();
+      e.stopPropagation();
+      e.nativeEvent.stopImmediatePropagation();
+      commitSearch();
+    },
+    [isCommandMode, project, query, commitSearch],
+  );
+
   const onClearHistory = async () => {
     try {
       await searchHistoryClear();
@@ -170,11 +213,12 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
           <CommandInput
             value={query}
             onValueChange={setQuery}
+            onKeyDown={onInputKeyDown}
             placeholder={
               isCommandMode
                 ? "Type a command (Open project, Set theme, …)"
                 : project
-                  ? "tag:wip type:psd is:violation …  (>command for actions)"
+                  ? "tag:wip type:psd is:violation …  (Enter to open in FlatView)"
                   : "Open a project to search, or type > for commands"
             }
             autoFocus

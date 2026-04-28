@@ -39,7 +39,7 @@ import { ViolationBadges } from "@/components/violation-badges";
 const DEBOUNCE_MS = 200;
 
 export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
-  const { project, refreshTick } = useProject();
+  const { project, refreshTick, flatViewSubmission } = useProject();
   const reportSummary = useReportFlatView();
   const [query, setQuery] = React.useState("");
   const [display, setDisplay] = React.useState<ViewDisplay>("list");
@@ -96,6 +96,18 @@ export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
     setDisplay("list");
     void refreshViews();
   }, [project?.root, refreshViews]);
+
+  // Subscribe to query commits from the command palette. When the
+  // user presses Enter on a typed query, project-context bumps the
+  // versioned `flatViewSubmission` slot — we mirror it into our own
+  // `query` state so the input shows the committed text and the
+  // existing search effect re-runs. Saved-view selection is cleared
+  // because the committed query overrides whichever view was active.
+  React.useEffect(() => {
+    if (!flatViewSubmission) return;
+    setQuery(flatViewSubmission.query);
+    setActiveViewId(null);
+  }, [flatViewSubmission]);
 
   // Debounced search whenever query changes. Empty query falls
   // through to `files_list_all` so the panel always shows *something*
