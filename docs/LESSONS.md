@@ -528,6 +528,20 @@
   - **Radix ToggleGroup は active item を再度クリックすると `""` を返す**。"必ずどちらかが選択される" UX にしたい場合は `onValueChange` で `if (v === "list" || v === "grid") onChange(v)` のようにフィルタする
 - 場所: `app/src/components/{directory-inspector,flat-view}.tsx`、`docs/CLAUDE.md` の「避けるべきこと」にも追記済み
 
+### macOS カスタム titlebar は `titleBarStyle: "Overlay"` + `hiddenTitle: true` + `data-tauri-drag-region`
+- macOS でトラフィックライト（赤/黄/緑）を残しつつ webview を窓いっぱいに広げたい時の正しい組み合わせ。`tauri.conf.json` の `windows[].titleBarStyle` を `"Overlay"`、`hiddenTitle` を `true` に。`decorations: false` は traffic lights ごと消えてしまうので NG（macOS-first の v1.0 ではユーザー期待を裏切る）
+- traffic lights は webview 上にオーバーレイされるので、左 80px 程度の **`pl-[80px]`** をリザーブしないと最初のコンテンツがボタンに被る。Windows / Linux ではそのまま無害な左パディング（v1.1 で platform-aware に置換予定）
+- **`data-tauri-drag-region` は子孫に伝播しない** — その属性が付いた**まさにその要素だけ**がドラッグハンドルになる。flex / grid コンテナを入れ子にすると、外側の親に属性を付けただけだと内側の子コンテナの "ボタン同士の隙間" は dead zone になる
+- **解決はグローバル CSS で `-webkit-app-region: drag` を子孫まで広げる**。macOS WKWebView は Electron 同様 `-webkit-app-region` を解釈するので、`[data-tauri-drag-region], [data-tauri-drag-region] * { -webkit-app-region: drag; }` と書けば titlebar 内の空きスペース全部が draggable になる。インタラクティブ要素（button / input / [role="button"] 等）は同じ CSS で `no-drag` に opt-out させる
+- 場所: `app/src/index.css` の `@layer base` ブロック（drag / no-drag セレクタ）
+- レイアウトは `grid grid-cols-[1fr_auto_1fr]` の 3 カラムに揃えると左クラスタ幅が変わっても中央コンテンツ（検索バー等）が物理中央に固定される。flex + `ml-auto` だと左クラスタが広がった時に中央がズレる
+- 場所: `crates/progest-tauri/tauri.conf.json`、`app/src/components/title-bar.tsx`、`docs/CLAUDE.md` の「避けるべきこと」にも追記済み
+
+### `react-resizable-panels` v4 は `order` プロップを廃止、panel は `id` で永続化を識別する
+- v0/v1/v2 系の多くのチュートリアルが `<ResizablePanel order={1}>` を使うが、v4 では `BasePanelAttributes` から `order` が消えており、TS が `Property 'order' does not exist` で弾く
+- 解決: `order` は削除。条件付きレンダ（panel の visibility トグル）でも `id` だけで動的に panels を構成して問題ない。layout の永続化は Group 側 `id` ＋ Panel 側 `id` の組で完結
+- 場所: `app/src/App.tsx::MainShell`
+
 ### shadcn の `Resizable` は v4 の `react-resizable-panels` を呼ぶ — `direction` ではなく `orientation`、`autoSaveId` ではなく `id`
 - v0/v1/v2 の `react-resizable-panels`（多くのチュートリアルが書いている API）と v4 で props が非互換
 - v4: `<ResizablePanelGroup orientation="horizontal" id="my-shell">`、layout の永続化は `id` を渡せば自動で localStorage に保存される

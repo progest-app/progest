@@ -7,7 +7,12 @@ import { TreeView } from "@/components/tree-view";
 import { FlatView } from "@/components/flat-view";
 import { ResultDetailDialog } from "@/components/result-detail-dialog";
 import { StatusBar } from "@/components/status-bar";
-import { ThemeToggle } from "@/components/theme-toggle";
+import {
+  ALL_PANELS_VISIBLE,
+  TitleBar,
+  type PanelKey,
+  type PanelVisibility,
+} from "@/components/title-bar";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -17,6 +22,23 @@ import { ThemeProvider } from "next-themes";
 import type { DirEntry, RichSearchHit } from "@/lib/ipc";
 
 import "./App.css";
+
+const PANEL_VISIBILITY_KEY = "progest:panel-visibility";
+
+function loadPanelVisibility(): PanelVisibility {
+  try {
+    const raw = localStorage.getItem(PANEL_VISIBILITY_KEY);
+    if (!raw) return ALL_PANELS_VISIBLE;
+    const parsed = JSON.parse(raw) as Partial<PanelVisibility>;
+    return {
+      tree: parsed.tree ?? true,
+      flat: parsed.flat ?? true,
+      inspector: parsed.inspector ?? true,
+    };
+  } catch {
+    return ALL_PANELS_VISIBLE;
+  }
+}
 
 export function App() {
   return (
@@ -49,6 +71,22 @@ function Shell() {
   // inspector. Default to the project root so the inspector always has
   // something to render.
   const [selectedDir, setSelectedDir] = React.useState<string>("");
+  // Panel visibility lives at the shell level so the titlebar toggles
+  // can drive the Resizable layout. Persisted to localStorage so user
+  // preferences survive a reload.
+  const [panels, setPanels] = React.useState<PanelVisibility>(() => loadPanelVisibility());
+  React.useEffect(() => {
+    localStorage.setItem(PANEL_VISIBILITY_KEY, JSON.stringify(panels));
+  }, [panels]);
+  const togglePanel = React.useCallback((key: PanelKey) => {
+    setPanels((p) => {
+      // Don't let the user hide every panel — there'd be nothing left
+      // to interact with except the titlebar itself.
+      const next = { ...p, [key]: !p[key] };
+      if (!next.tree && !next.flat && !next.inspector) return p;
+      return next;
+    });
+  }, []);
 
   // Reset selection when the user swaps projects — otherwise the
   // inspector keeps trying to read accepts for a dir that may not
@@ -59,16 +97,21 @@ function Shell() {
 
   return (
     <>
-      {project ? (
-        <MainShell
-          onPickHit={(h) => setHitDetail(h)}
-          onPickTreeFile={(e) => setTreeDetail(e)}
-          selectedDir={selectedDir}
-          onSelectDir={setSelectedDir}
-        />
-      ) : (
-        <Welcome />
-      )}
+      <div className="grid h-screen grid-rows-[auto_1fr_auto] bg-background">
+        <TitleBar panels={panels} onTogglePanel={togglePanel} />
+        {project ? (
+          <MainShell
+            onPickHit={(h) => setHitDetail(h)}
+            onPickTreeFile={(e) => setTreeDetail(e)}
+            selectedDir={selectedDir}
+            onSelectDir={setSelectedDir}
+            panels={panels}
+          />
+        ) : (
+          <Welcome />
+        )}
+        <StatusBar />
+      </div>
       {/*
         CommandPalette is mounted globally so Cmd+K works even from the
         Welcome screen. Its hit handler routes through the same detail
@@ -97,106 +140,108 @@ function MainShell(props: {
   onPickTreeFile: (entry: DirEntry) => void;
   selectedDir: string;
   onSelectDir: (path: string) => void;
+  panels: PanelVisibility;
 }) {
-  return (
-    <div className="grid h-screen grid-rows-[auto_1fr_auto] bg-background">
-      <TopBar />
-      <div className="overflow-hidden border-t">
-        <ResizablePanelGroup orientation="horizontal" id="progest:main-shell" className="h-full">
-          <ResizablePanel defaultSize={22} minSize={12}>
-            <aside className="h-full overflow-hidden">
-              <TreeView
-                onPickFile={props.onPickTreeFile}
-                selectedDir={props.selectedDir}
-                onSelectDir={props.onSelectDir}
-              />
-            </aside>
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={40} minSize={20}>
-            <main className="h-full overflow-hidden">
-              <FlatView onPickHit={props.onPickHit} />
-            </main>
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel defaultSize={38} minSize={20}>
-            <aside className="h-full overflow-hidden">
-              <DirectoryInspector dir={props.selectedDir} />
-            </aside>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </div>
-      <StatusBar />
-    </div>
-  );
-}
+  // Build the panel list dynamically so hidden panels disappear from
+  // the Resizable group entirely (and so do their handles). Each
+  // ResizablePanel keeps its `id` so the library's persisted layout
+  // can rehydrate correctly when the panel returns.
+  const panes: { key: PanelKey; node: React.ReactNode }[] = [];
+  if (props.panels.tree) {
+    panes.push({
+      key: "tree",
+      node: (
+        <ResizablePanel id="tree" key="tree" defaultSize={22} minSize={12}>
+          <aside className="h-full overflow-hidden">
+            <TreeView
+              onPickFile={props.onPickTreeFile}
+              selectedDir={props.selectedDir}
+              onSelectDir={props.onSelectDir}
+            />
+          </aside>
+        </ResizablePanel>
+      ),
+    });
+  }
+  if (props.panels.flat) {
+    panes.push({
+      key: "flat",
+      node: (
+        <ResizablePanel id="flat" key="flat" defaultSize={40} minSize={20}>
+          <main className="h-full overflow-hidden">
+            <FlatView onPickHit={props.onPickHit} />
+          </main>
+        </ResizablePanel>
+      ),
+    });
+  }
+  if (props.panels.inspector) {
+    panes.push({
+      key: "inspector",
+      node: (
+        <ResizablePanel id="inspector" key="inspector" defaultSize={38} minSize={20}>
+          <aside className="h-full overflow-hidden">
+            <DirectoryInspector dir={props.selectedDir} />
+          </aside>
+        </ResizablePanel>
+      ),
+    });
+  }
 
-function TopBar() {
-  const { project, openPicker } = useProject();
   return (
-    <header className="flex items-center gap-3 px-3 py-2">
-      <h1 className="text-sm font-semibold tracking-tight">Progest</h1>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => void openPicker()}
-        title={project ? `Open another project (current: ${project.name})` : "Open project"}
-      >
-        <FolderOpen />
-        {project ? project.name : "Open project…"}
-      </Button>
-      <span className="ml-auto text-xs text-muted-foreground">⌘K to search</span>
-      <ThemeToggle />
-    </header>
+    <div className="overflow-hidden">
+      <ResizablePanelGroup orientation="horizontal" id="progest:main-shell" className="h-full">
+        {panes.map((p, i) => (
+          <React.Fragment key={p.key}>
+            {i > 0 ? <ResizableHandle withHandle /> : null}
+            {p.node}
+          </React.Fragment>
+        ))}
+      </ResizablePanelGroup>
+    </div>
   );
 }
 
 function Welcome() {
   const { recent, openPicker, pickRecent, error } = useProject();
   return (
-    <div className="grid h-screen grid-rows-[1fr_auto] bg-background">
-      <div className="relative flex flex-col items-center justify-center gap-6 p-6">
-        <div className="absolute top-3 right-3">
-          <ThemeToggle />
-        </div>
-        <div className="text-center">
-          <h1 className="text-2xl font-semibold tracking-tight">Progest</h1>
-          <p className="text-xs text-muted-foreground">
-            Open a project (a folder containing <code>.progest/</code>).
-          </p>
-        </div>
-        <Button onClick={() => void openPicker()}>
-          <FolderOpen /> Open project…
-        </Button>
-        {recent.length > 0 ? (
-          <div className="grid w-full max-w-md gap-1 text-xs">
-            <div className="text-muted-foreground">Recent</div>
-            <ul className="grid gap-1">
-              {recent.slice(0, 8).map((entry) => (
-                <li key={entry.root}>
-                  <Button
-                    variant="outline"
-                    onClick={() => void pickRecent(entry)}
-                    className="grid h-auto w-full grid-cols-[1fr_auto] items-center gap-2 px-2 py-1.5 text-left font-normal"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate">{entry.name || entry.root}</div>
-                      <div className="truncate text-[0.625rem] text-muted-foreground">
-                        {entry.root}
-                      </div>
-                    </div>
-                    <span className="text-[0.625rem] text-muted-foreground">
-                      {relTime(entry.last_opened)}
-                    </span>
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-        {error ? <div className="text-xs text-destructive">{error}</div> : null}
+    <div className="flex flex-col items-center justify-center gap-6 overflow-auto p-6">
+      <div className="text-center">
+        <h1 className="text-2xl font-semibold tracking-tight">Progest</h1>
+        <p className="text-xs text-muted-foreground">
+          Open a project (a folder containing <code>.progest/</code>).
+        </p>
       </div>
-      <StatusBar />
+      <Button onClick={() => void openPicker()}>
+        <FolderOpen /> Open project…
+      </Button>
+      {recent.length > 0 ? (
+        <div className="grid w-full max-w-md gap-1 text-xs">
+          <div className="text-muted-foreground">Recent</div>
+          <ul className="grid gap-1">
+            {recent.slice(0, 8).map((entry) => (
+              <li key={entry.root}>
+                <Button
+                  variant="outline"
+                  onClick={() => void pickRecent(entry)}
+                  className="grid h-auto w-full grid-cols-[1fr_auto] items-center gap-2 px-2 py-1.5 text-left font-normal"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate">{entry.name || entry.root}</div>
+                    <div className="truncate text-[0.625rem] text-muted-foreground">
+                      {entry.root}
+                    </div>
+                  </div>
+                  <span className="text-[0.625rem] text-muted-foreground">
+                    {relTime(entry.last_opened)}
+                  </span>
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {error ? <div className="text-xs text-destructive">{error}</div> : null}
     </div>
   );
 }
