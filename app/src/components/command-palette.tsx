@@ -29,7 +29,6 @@ import {
   usePaletteCommands,
   type PaletteCommand,
 } from "@/lib/palette-commands";
-import { ResultDetailDialog } from "@/components/result-detail-dialog";
 import { ViolationBadges } from "@/components/violation-badges";
 
 /** Prefix that flips the palette into "system commands" mode. */
@@ -46,8 +45,6 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
   const [loading, setLoading] = React.useState(false);
   const [history, setHistory] = React.useState<HistoryEntry[]>([]);
   const [error, setError] = React.useState<string | null>(null);
-  const [selected, setSelected] = React.useState<RichSearchHit | null>(null);
-
   const allCommands = usePaletteCommands();
   const isCommandMode = query.startsWith(COMMAND_PREFIX);
   const commandQuery = isCommandMode ? query.slice(COMMAND_PREFIX.length).trim() : "";
@@ -139,11 +136,7 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
 
   const onPickHit = (hit: RichSearchHit) => {
     setOpen(false);
-    if (props.onPickHit) {
-      props.onPickHit(hit);
-    } else {
-      setSelected(hit);
-    }
+    props.onPickHit?.(hit);
   };
 
   // Commit the typed query to the FlatView and record it as a history
@@ -280,13 +273,6 @@ export function CommandPalette(props: { onPickHit?: (hit: RichSearchHit) => void
           projectName={project?.name ?? null}
         />
       </CommandDialog>
-      <ResultDetailDialog
-        hit={selected}
-        open={selected !== null}
-        onOpenChange={(o) => {
-          if (!o) setSelected(null);
-        }}
-      />
     </>
   );
 }
