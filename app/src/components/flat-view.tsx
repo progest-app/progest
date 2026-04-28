@@ -386,12 +386,12 @@ function HitList(props: {
           >
             <FileIcon className="size-3.5 opacity-60" />
             <span className="truncate font-mono">{hit.path}</span>
-            <ViolationBadges counts={hit.violations} />
             {hit.tags.length > 0 ? (
-              <span className="ml-2 truncate text-[0.625rem] text-muted-foreground">
+              <span className="shrink-0 truncate text-[0.625rem] text-muted-foreground">
                 {hit.tags.map((t) => `#${t}`).join(" ")}
               </span>
             ) : null}
+            <ViolationBadges counts={hit.violations} />
           </button>
         </li>
       ))}
