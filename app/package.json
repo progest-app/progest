@@ -17,6 +17,7 @@
   "dependencies": {
     "@fontsource-variable/geist-mono": "^5.2.7",
     "@tailwindcss/vite": "^4.2.4",
+    "@tanstack/react-table": "^8.21.3",
     "@tauri-apps/api": "^2.10.0",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "class-variance-authority": "^0.7.1",
