@@ -5,6 +5,7 @@ import { filesListDir, IpcError, type DirEntry, type FileEntry } from "@/lib/ipc
 import { useProject } from "@/lib/project-context";
 
 import { ViolationDots } from "@/components/violation-badges";
+import { cn } from "@/lib/utils";
 
 type LoadState = "idle" | "loading" | "loaded" | "error";
 
@@ -14,8 +15,12 @@ type DirState = {
   error?: string;
 };
 
-export function TreeView(props: { onPickFile?: (entry: DirEntry) => void }) {
-  const { project } = useProject();
+export function TreeView(props: {
+  onPickFile?: (entry: DirEntry) => void;
+  selectedDir?: string;
+  onSelectDir?: (path: string) => void;
+}) {
+  const { project, refreshTick } = useProject();
   // path "" = root; cache keeps loaded children + error per path so
   // collapsing/re-expanding doesn't re-fetch.
   const [cache, setCache] = React.useState<Record<string, DirState>>({});
@@ -48,6 +53,20 @@ export function TreeView(props: { onPickFile?: (entry: DirEntry) => void }) {
     void fetchDir("");
   }, [project?.root, fetchDir]);
 
+  // `refreshTick` is bumped by long-lived workflows that mutate
+  // indexed state (accepts edits → lint refresh). Drop the cache and
+  // re-fetch every currently-expanded path so the badges update
+  // without forcing the user to collapse / re-expand each branch.
+  const expandedSnapshot = React.useRef(expanded);
+  expandedSnapshot.current = expanded;
+  React.useEffect(() => {
+    if (refreshTick === 0) return;
+    setCache({});
+    for (const path of expandedSnapshot.current) {
+      void fetchDir(path);
+    }
+  }, [refreshTick, fetchDir]);
+
   const toggle = React.useCallback(
     async (path: string) => {
       const next = new Set(expanded);
@@ -74,6 +93,8 @@ export function TreeView(props: { onPickFile?: (entry: DirEntry) => void }) {
         cache={cache}
         toggle={toggle}
         onPickFile={props.onPickFile}
+        selectedDir={props.selectedDir}
+        onSelectDir={props.onSelectDir}
       />
     </nav>
   );
@@ -87,18 +108,28 @@ function DirNode(props: {
   cache: Record<string, DirState>;
   toggle: (path: string) => Promise<void>;
   onPickFile: ((entry: DirEntry) => void) | undefined;
+  selectedDir: string | undefined;
+  onSelectDir: ((path: string) => void) | undefined;
 }) {
-  const { path, name, depth, expanded, cache, toggle, onPickFile } = props;
+  const { path, name, depth, expanded, cache, toggle, onPickFile, selectedDir, onSelectDir } =
+    props;
   const isOpen = expanded.has(path);
+  const isSelected = selectedDir === path;
   const entry = cache[path];
   const indent = depth * 12;
   return (
     <div>
       <button
         type="button"
-        className="flex w-full items-center gap-1 rounded px-1 py-0.5 hover:bg-accent"
+        className={cn(
+          "flex w-full items-center gap-1 rounded px-1 py-0.5 hover:bg-accent",
+          isSelected && "bg-accent text-accent-foreground",
+        )}
         style={{ paddingLeft: indent + 4 }}
-        onClick={() => void toggle(path)}
+        onClick={() => {
+          onSelectDir?.(path);
+          void toggle(path);
+        }}
       >
         {isOpen ? (
           <ChevronDown className="size-3 opacity-60" />
@@ -140,6 +171,8 @@ function DirNode(props: {
                   cache={cache}
                   toggle={toggle}
                   onPickFile={onPickFile}
+                  selectedDir={selectedDir}
+                  onSelectDir={onSelectDir}
                 />
               ) : (
                 <FileNode key={child.path} entry={child} depth={depth + 1} onPick={onPickFile} />

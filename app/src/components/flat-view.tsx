@@ -30,7 +30,7 @@ import { ViolationBadges } from "@/components/violation-badges";
 const DEBOUNCE_MS = 200;
 
 export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
-  const { project } = useProject();
+  const { project, refreshTick } = useProject();
   const reportSummary = useReportFlatView();
   const [query, setQuery] = React.useState("");
   const [display, setDisplay] = React.useState<ViewDisplay>("list");
@@ -145,7 +145,10 @@ export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
     // the empty-query files_list_all (or the saved view's loaded
     // query) against the new index even when the query string itself
     // is identical between projects.
-  }, [query, project?.root]);
+    // `refreshTick` is bumped by long-lived workflows that mutate
+    // indexed state (e.g. accepts edits → lint refresh) so badges
+    // pick up the new violations without a typo.
+  }, [query, project?.root, refreshTick]);
 
   const onSelectView = (id: string) => {
     if (id === "") {

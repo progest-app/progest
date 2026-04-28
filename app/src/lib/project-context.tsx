@@ -22,6 +22,16 @@ type ProjectContextValue = {
   /** Open one of the recent entries (skips the picker). */
   pickRecent: (entry: RecentProject) => Promise<void>;
   clearRecent: () => Promise<void>;
+  /**
+   * Monotonic counter bumped whenever indexed state (violations, tags,
+   * search projection) may have changed out-of-band — e.g. the
+   * directory inspector ran `lint_run` after an `[accepts]` save.
+   * Long-lived consumers (FlatView, TreeView) include this in their
+   * effect deps so they re-fetch.
+   */
+  refreshTick: number;
+  /** Bump [`refreshTick`]. */
+  bumpRefresh: () => void;
 };
 
 const Ctx = React.createContext<ProjectContextValue | null>(null);
@@ -30,6 +40,10 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [project, setProject] = React.useState<ProjectInfo | null>(null);
   const [recent, setRecent] = React.useState<RecentProject[]>([]);
   const [error, setError] = React.useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = React.useState(0);
+  const bumpRefresh = React.useCallback(() => {
+    setRefreshTick((n) => n + 1);
+  }, []);
 
   const refresh = React.useCallback(async () => {
     try {
@@ -108,8 +122,20 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       openPicker,
       pickRecent,
       clearRecent,
+      refreshTick,
+      bumpRefresh,
     }),
-    [project, recent, error, refresh, openPicker, pickRecent, clearRecent],
+    [
+      project,
+      recent,
+      error,
+      refresh,
+      openPicker,
+      pickRecent,
+      clearRecent,
+      refreshTick,
+      bumpRefresh,
+    ],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

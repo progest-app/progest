@@ -16,7 +16,9 @@ export default defineConfig({
   // Vite+ unified toolchain (oxlint + oxfmt + tsgo).
   // https://viteplus.dev/guide/migrate
   fmt: {
-    ignorePatterns: ["dist/**", "src/components/ui/**"],
+    // `vite.config.{js,d.ts}` are tsc -b artifacts (gitignored) — exclude
+    // so a stale build copy doesn't fail `vp fmt --check`.
+    ignorePatterns: ["dist/**", "src/components/ui/**", "vite.config.js", "vite.config.d.ts"],
   },
   lint: {
     // Rule + ignore config lives in `.oxlintrc.json`; `options` holds CLI-style
