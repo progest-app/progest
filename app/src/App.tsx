@@ -3,10 +3,10 @@ import { FolderOpen, FolderPlus, Sparkles } from "lucide-react";
 
 import { CommandPalette } from "@/components/command-palette";
 import { DirectoryInspector } from "@/components/directory-inspector";
+import { FileInspector } from "@/components/file-inspector";
 import { TreeView } from "@/components/tree-view";
 import { FlatView } from "@/components/flat-view";
 import { InitProjectDialog } from "@/components/init-project-dialog";
-import { ResultDetailDialog } from "@/components/result-detail-dialog";
 import { StatusBar } from "@/components/status-bar";
 import {
   ALL_PANELS_VISIBLE,
@@ -25,6 +25,14 @@ import type { DirEntry, RichSearchHit } from "@/lib/ipc";
 import "./App.css";
 
 const PANEL_VISIBILITY_KEY = "progest:panel-visibility";
+
+/**
+ * Either a directory the user is inspecting (TreeView click on a dir)
+ * or a single file (TreeView / FlatView / palette click on a file).
+ * Mutually exclusive — picking one clears the other so the inspector
+ * pane never tries to render both at once.
+ */
+type Selection = { kind: "dir"; path: string } | { kind: "file"; hit: RichSearchHit } | null;
 
 function loadPanelVisibility(): PanelVisibility {
   try {
@@ -63,15 +71,7 @@ export function App() {
 
 function Shell() {
   const { project } = useProject();
-  // Currently-selected file from the tree (DirEntry) or flat view
-  // (RichSearchHit). Both feed a shared detail dialog so the user can
-  // inspect a file without losing their place in the tree.
-  const [hitDetail, setHitDetail] = React.useState<RichSearchHit | null>(null);
-  const [treeDetail, setTreeDetail] = React.useState<DirEntry | null>(null);
-  // The tree's currently-selected directory feeds the right-pane
-  // inspector. Default to the project root so the inspector always has
-  // something to render.
-  const [selectedDir, setSelectedDir] = React.useState<string>("");
+  const [selection, setSelection] = React.useState<Selection>(null);
   // Panel visibility lives at the shell level so the titlebar toggles
   // can drive the Resizable layout. Persisted to localStorage so user
   // preferences survive a reload.
@@ -90,11 +90,26 @@ function Shell() {
   }, []);
 
   // Reset selection when the user swaps projects — otherwise the
-  // inspector keeps trying to read accepts for a dir that may not
+  // inspector keeps trying to read state for a path that may not
   // exist in the new project.
   React.useEffect(() => {
-    setSelectedDir("");
+    setSelection(null);
   }, [project?.root]);
+
+  const onPickFlatHit = React.useCallback((hit: RichSearchHit) => {
+    setSelection({ kind: "file", hit });
+  }, []);
+
+  const onPickTreeFile = React.useCallback((entry: DirEntry) => {
+    const hit = treeEntryToHit(entry);
+    if (hit) setSelection({ kind: "file", hit });
+  }, []);
+
+  const onSelectDir = React.useCallback((path: string) => {
+    setSelection({ kind: "dir", path });
+  }, []);
+
+  const selectedDir = selection?.kind === "dir" ? selection.path : "";
 
   return (
     <>
@@ -102,10 +117,11 @@ function Shell() {
         <TitleBar panels={panels} onTogglePanel={togglePanel} />
         {project ? (
           <MainShell
-            onPickHit={(h) => setHitDetail(h)}
-            onPickTreeFile={(e) => setTreeDetail(e)}
+            onPickHit={onPickFlatHit}
+            onPickTreeFile={onPickTreeFile}
+            selection={selection}
             selectedDir={selectedDir}
-            onSelectDir={setSelectedDir}
+            onSelectDir={onSelectDir}
             panels={panels}
           />
         ) : (
@@ -115,24 +131,12 @@ function Shell() {
       </div>
       {/*
         CommandPalette is mounted globally so Cmd+K works even from the
-        Welcome screen. Its hit handler routes through the same detail
-        dialog as the FlatView selection.
+        Welcome screen. Hit picks now flow into the same selection slot
+        as TreeView / FlatView clicks — the file inspector renders the
+        details that used to live in the dialog.
       */}
-      <CommandPalette onPickHit={(h) => setHitDetail(h)} />
+      <CommandPalette onPickHit={onPickFlatHit} />
       <InitProjectDialog />
-      <ResultDetailDialog
-        hit={hitDetail}
-        open={hitDetail !== null}
-        onOpenChange={(o) => {
-          if (!o) setHitDetail(null);
-        }}
-      />
-      <TreeFileDetail
-        entry={treeDetail}
-        onOpenChange={(o) => {
-          if (!o) setTreeDetail(null);
-        }}
-      />
     </>
   );
 }
@@ -140,6 +144,7 @@ function Shell() {
 function MainShell(props: {
   onPickHit: (hit: RichSearchHit) => void;
   onPickTreeFile: (entry: DirEntry) => void;
+  selection: Selection;
   selectedDir: string;
   onSelectDir: (path: string) => void;
   panels: PanelVisibility;
@@ -183,7 +188,7 @@ function MainShell(props: {
       node: (
         <ResizablePanel id="inspector" key="inspector" defaultSize={38} minSize={20}>
           <aside className="h-full overflow-hidden">
-            <DirectoryInspector dir={props.selectedDir} />
+            <InspectorPane selection={props.selection} />
           </aside>
         </ResizablePanel>
       ),
@@ -202,6 +207,19 @@ function MainShell(props: {
       </ResizablePanelGroup>
     </div>
   );
+}
+
+/**
+ * Route the inspector pane between directory-mode and file-mode based
+ * on the current selection. Empty selection falls back to the
+ * directory inspector at project root, matching the previous default.
+ */
+function InspectorPane(props: { selection: Selection }) {
+  if (props.selection?.kind === "file") {
+    return <FileInspector hit={props.selection.hit} />;
+  }
+  const dir = props.selection?.kind === "dir" ? props.selection.path : "";
+  return <DirectoryInspector dir={dir} />;
 }
 
 function Welcome() {
@@ -256,25 +274,25 @@ function Welcome() {
   );
 }
 
-function TreeFileDetail(props: { entry: DirEntry | null; onOpenChange: (open: boolean) => void }) {
-  // The tree node carries the same FileEntry shape the flat view does,
-  // but without the file_id-keyed `path` field. We synthesize a
-  // RichSearchHit-shaped payload so ResultDetailDialog can render it.
-  const hit = React.useMemo<RichSearchHit | null>(() => {
-    const entry = props.entry;
-    if (!entry || entry.kind !== "file" || !entry.file) return null;
-    return {
-      file_id: entry.file.file_id ?? "(unindexed)",
-      path: entry.path,
-      name: entry.name,
-      kind: entry.file.kind,
-      ext: entry.file.ext,
-      tags: entry.file.tags,
-      violations: entry.file.violations,
-      custom_fields: entry.file.custom_fields,
-    };
-  }, [props.entry]);
-  return <ResultDetailDialog hit={hit} open={hit !== null} onOpenChange={props.onOpenChange} />;
+/**
+ * TreeView yields `DirEntry` for both directories and files; we only
+ * route file rows into the selection slot, and reshape them into the
+ * `RichSearchHit` envelope the inspector expects. Returns `null` for
+ * directory entries or files that haven't been hydrated by the index
+ * yet (the tree shows on-disk truth, the index lags behind reconcile).
+ */
+function treeEntryToHit(entry: DirEntry): RichSearchHit | null {
+  if (entry.kind !== "file" || !entry.file) return null;
+  return {
+    file_id: entry.file.file_id ?? "",
+    path: entry.path,
+    name: entry.name,
+    kind: entry.file.kind,
+    ext: entry.file.ext,
+    tags: entry.file.tags,
+    violations: entry.file.violations,
+    custom_fields: entry.file.custom_fields,
+  };
 }
 
 function relTime(rfc3339: string): string {

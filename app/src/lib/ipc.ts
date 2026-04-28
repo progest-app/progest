@@ -336,6 +336,46 @@ export async function acceptsWrite(dir: string, accepts: RawAccepts | null): Pro
   }
 }
 
+// --- file inspector (tag + notes mutation) -------------------------------
+
+export type NotesReadResponse = {
+  path: string;
+  body: string;
+  sidecar_exists: boolean;
+};
+
+export async function tagAdd(file_id: string, tag: string): Promise<void> {
+  try {
+    await invoke<void>("tag_add", { fileId: file_id, tag });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function tagRemove(file_id: string, tag: string): Promise<void> {
+  try {
+    await invoke<void>("tag_remove", { fileId: file_id, tag });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function notesRead(path: string): Promise<NotesReadResponse> {
+  try {
+    return await invoke<NotesReadResponse>("notes_read", { path });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function notesWrite(path: string, body: string): Promise<void> {
+  try {
+    await invoke<void>("notes_write", { path, body });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
 // --- lint refresh ----------------------------------------------------------
 
 export type LintRunResponse = {

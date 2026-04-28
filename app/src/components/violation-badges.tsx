@@ -3,6 +3,7 @@ import { Triangle, Hash } from "lucide-react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { RichViolationCounts } from "@/lib/ipc";
+import { cn } from "@/lib/utils";
 
 /**
  * Full violation badges with category icon + count. Designed for
@@ -23,14 +24,25 @@ import type { RichViolationCounts } from "@/lib/ipc";
 export function ViolationBadges({
   counts,
   titles,
+  className,
 }: {
   counts: RichViolationCounts;
   titles?: { naming?: string; placement?: string; sequence?: string };
+  /** Override the wrapper layout. Defaults to `ml-auto` (right-aligned
+   *  inside flex parents like the palette / flat view rows). The
+   *  inspector passes its own classes so the badges sit at the start
+   *  of the value column instead of being pushed to the cell edge. */
+  className?: string;
 }) {
   const total = counts.naming + counts.placement + counts.sequence;
   if (total === 0) return null;
   return (
-    <span className="ml-auto flex items-center gap-1 text-[0.625rem] tracking-wide">
+    <span
+      className={cn(
+        "flex items-center gap-1 text-[0.625rem] tracking-wide",
+        className ?? "ml-auto",
+      )}
+    >
       {counts.naming > 0 ? (
         <Badge tooltip={titles?.naming}>
           <span className="rounded bg-badge-naming/15 px-1 py-0.5 text-badge-naming">
