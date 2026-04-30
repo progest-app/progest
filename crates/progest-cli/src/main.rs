@@ -16,6 +16,7 @@ use commands::lint::LintArgs;
 use commands::rename::{RenameArgs, RenameMode};
 use commands::search::SearchArgs;
 use commands::tag::{TagArgs, TagCommand};
+use commands::thumbnail::{ThumbnailCleanArgs, ThumbnailGenerateArgs};
 use commands::undo::{Direction as UndoDirection, UndoRedoArgs};
 use commands::view::{ViewArgs, ViewCommand};
 use output::OutputFormat;
@@ -172,6 +173,11 @@ enum Command {
         #[command(subcommand)]
         op: ViewOp,
     },
+    /// Generate or manage thumbnail cache.
+    Thumbnail {
+        #[command(subcommand)]
+        op: ThumbnailOp,
+    },
     /// Undo the top of the history stack. Default unwinds the whole
     /// `group_id` (a bulk rename / sequence); `--entry` limits to one.
     Undo {
@@ -263,6 +269,32 @@ enum ViewOp {
     },
     /// List all saved views.
     List {
+        #[arg(long, default_value = "text", value_enum)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ThumbnailOp {
+    /// Generate thumbnails for project files.
+    Generate {
+        /// Files to generate thumbnails for (project-relative or absolute paths).
+        /// When omitted, generates for all indexed files with supported formats.
+        #[arg(value_name = "PATH")]
+        paths: Vec<std::path::PathBuf>,
+        /// Regenerate even if a cached thumbnail exists.
+        #[arg(long)]
+        force: bool,
+        /// Max dimension in pixels (default 256).
+        #[arg(long, default_value = "256")]
+        size: u32,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: OutputFormat,
+    },
+    /// Remove orphan thumbnails and evict LRU entries over the capacity limit.
+    Clean {
+        /// Output format.
         #[arg(long, default_value = "text", value_enum)]
         format: OutputFormat,
     },
@@ -401,6 +433,28 @@ fn main() -> Result<ExitCode> {
                     explain,
                 },
             )?;
+            Ok(to_exit_code(code))
+        }
+        Command::Thumbnail { op } => {
+            let code = match op {
+                ThumbnailOp::Generate {
+                    paths,
+                    force,
+                    size,
+                    format,
+                } => commands::thumbnail::run_generate(
+                    &cwd,
+                    &ThumbnailGenerateArgs {
+                        paths,
+                        format,
+                        force,
+                        size,
+                    },
+                )?,
+                ThumbnailOp::Clean { format } => {
+                    commands::thumbnail::run_clean(&cwd, &ThumbnailCleanArgs { format })?
+                }
+            };
             Ok(to_exit_code(code))
         }
         Command::Tag { op } => {
