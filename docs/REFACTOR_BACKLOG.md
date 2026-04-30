@@ -4,7 +4,7 @@
 
 着手前に [`CLAUDE.md`](../CLAUDE.md) の「不明点の扱い」と「破壊的操作は必ず preview → confirm」を念押し。
 
-最終更新: 2026-04-25
+最終更新: 2026-04-30
 
 ---
 
@@ -28,7 +28,7 @@
 - `main.rs::to_exit_code` と subcommand の `Result<i32>` / `Result<ExitCode>` 混在。`doctor` だけ `ExitCode` 直返し。
 - 案: `CommandExit { Success, Strict, EvalError(message) }` enum で集約。
 - コスト: small
-- タイミング: M3 で search コマンド追加時、または `doctor` のリッチ化時
+- タイミング: future（M3 で search 追加済み、`doctor` リッチ化時に再検討）
 
 ### A-3. CLI Args 構造の共通化
 
@@ -42,7 +42,7 @@
 - `clean.rs` / `rename.rs` が単一ファイル内で flag / args / preview / apply / emit を全部抱える（300〜500 行）。
 - 案: `cmd/{clean,rename}/{mod, args, output, apply}.rs` 風に分割。
 - コスト: medium
-- タイミング: M3 で search が入って同パターンを再現する前に
+- タイミング: future（M3 で search 追加済み、パターンが 5+ コマンドに増えたら）
 
 ---
 
