@@ -1,32 +1,34 @@
-# M3 引き継ぎメモ
+# M3 引き継ぎメモ（完了アーカイブ）
 
-M2 完了後に M3 を進めるための、次セッション向けハンドオフ。
-**M3 に関わる実装に入る前に必ず目を通す。** 進捗に合わせて更新していく。
+**M3 は 2026-04-30 をもって完了。** 本ドキュメントはアーカイブとして残置する。
 
-最終更新: 2026-04-28（FlatView を shadcn DataTable に移行: tanstack/react-table + 列ヘッダソート + カラム可視性トグル + grid 用 ソート Select、list/grid 共有 sort state）
+最終更新: 2026-04-30（M3 完了: 全 PR landed + 実機 smoke テスト済み + `@vitejs/plugin-react` v6 oxc 移行 + oxlint warning 修正）
 
 ---
 
-## 1. 現在地
+## 1. 完了サマリ
 
-- M2 Naming rules engine + accepts 完了。`core::rules` / `core::accepts` / `core::naming` / `core::history` / `core::rename` / `core::sequence` / `core::sequence::drift` / `core::lint` 全コア + CLI `init`/`scan`/`doctor`/`clean`/`rename`/`lint`/`undo`/`redo` + history retention 50 が landed（IMPLEMENTATION_PLAN §0）。
-- post-M2 リファクタ landed（PR #26）: CLI 共通化（`crate::output` / `crate::context` / `crate::walk`）、テストハーネス、`ApplyWarning` enum 統合。
-- M3 スコープ整合（PR #27）: §0/§5/M2_HANDOFF が「M3 = import」と「M3 = 検索とビュー」で乖離していたのを §5 を正として揃え直し。**M3 = 検索とビュー**、**M4 = import + thumbnail + AI + template** が確定。
-- M3 kickoff 議論で確定:
-  - 順序: DSL 仕様書 → `core::search` → FTS5 → CLI search/tag → UI
-  - PR 粒度: M2 同様フェーズ単位（7〜9 PR 想定）
-  - スコープ追加: **Tauri IPC 層を M3 で同時に係る**、**lindera は v1.x defer を IMPLEMENTATION_PLAN に明示**
-  - DSL 詰め方: M2 NAMING_RULES_DSL と同粒度の `docs/SEARCH_DSL.md` を最初に landed
-- DSL 仕様書 [`docs/SEARCH_DSL.md`](./SEARCH_DSL.md) landed（feat/m3-search-dsl-spec）: 文法 EBNF / 予約キー全 8 種 / 自由テキスト FTS5 trigram / カスタムフィールド / 性能契約 (10k=50ms / 100k=100ms p95) / Worked examples 8 / v1.x defer 候補 / 実装メモ。lindera は §3.2 / §15 で v1.x defer を明示。
-- `core::search` parser + AST + validate + planner landed（feat/m3-core-search-parser）: `progest_core::search::{ast, lex, parse, validate, plan, mod}`。二状態（Expr/Value）字句解析 + 再帰下降パーサ（OR > AND > NOT、`-` 単項、`( )` グループ、改行禁止）+ `Warning` 列挙 + `AlwaysFalse` 短絡 + `BindValue` パラメータ化 SQL 出力。`chrono` を workspace + core 依存に追加（datetime parse + UTC 正規化）。unit 72 + golden 8（§10 worked examples 1:1）= 全 80 テスト pass。
-- `core::index` migration 0002 + `core::search::execute` landed（feat/m3-search-executor）: `files` に search-derivable 列（`name` / `ext` / `notes` / `updated_at` / `is_orphan`）追加、`custom_fields(file_id, key, value_text, value_int)` / `violations(file_id, category, severity, rule_id, message)` テーブル新設、`files_fts` FTS5 virtual table（`tokenize='trigram'`、name+notes、UPDATE/DELETE トリガで sync）。`SearchHit { file_id, path }` の薄い結果型 + `BindValue: ToSql`、planner SQL を outer SELECT で wrap して path 投影。`is:violation` / `is:misplaced` は violations テーブル、`is:duplicate` は fingerprint self-join、`is:orphan` は flag column 経由に変更（旧 `has_*_violation` 案を取りやめ）。22 statement-level integration test（empty DB / tag / type / and / or / not / freetext / FTS triggers / range / is: 全種 / glob / custom int / 順序 / 複合）+ 既存 80 search test = 全 102 search test pass。`progest-core` 全 561 + golden 8 + integration 全 pass。reconcile/lint hook で実列を埋める作業は M3 #5 CLI 着手時に合流。
-- shadcn/ui 初期化 landed（feat/m3-shadcn-init）: `app/` workspace に Tailwind v4 (`tailwindcss` + `@tailwindcss/vite`) を導入、`@/*` import alias を `app/tsconfig.json`（baseUrl + paths）と `app/vite.config.ts`（`resolve.alias`）の両方に配線。`pnpm dlx shadcn@latest init --preset b1D0dy4m --template vite --pointer -c app` で `app/components.json` 生成（style=`radix-mira`、iconLibrary=`lucide`、baseColor=`neutral`、cssVariables=true、aliases は `@/components` / `@/components/ui` / `@/lib` / `@/lib/utils` / `@/hooks`）。`src/index.css` は `@theme inline` ブロック + light/dark トークン (oklch) + Geist Mono + `tw-animate-css` で初期化、`html { font-mono }` / `cursor: pointer for buttons`（`--pointer`）込み。`Button` / `Dialog` / `Command`（+ `Input` / `Textarea` / `InputGroup` を依存として）を `src/components/ui/` に追加、`@/lib/utils` 新設。`pnpm --filter @progest/app typecheck` + `build` + `mise run check` 全 green。コマンドパレット UI 配線（M3 #7）は別 PR。
-- コマンドパレット UI + Tauri search IPC landed（feat/m3-command-palette）:
-  - `core::search::history` 新設（`.progest/local/search-history.json`、`schema_version: 1` + `entries[]: { query, ts: DateTime<Utc> }`、`MAX_ENTRIES = 100`、`append` は dedup + 先頭挿入 + 切り詰め、空文字列 no-op、`clear` は entries のみ空に。`load`/`save` は `FileSystem` trait + atomic write、missing → `HistoryError::NotFound`。`ProjectRoot::search_history_json()` accessor + `SEARCH_HISTORY_FILENAME` const）。10 unit test（round-trip / 順序 / dedup / empty / retention / clear / schema mismatch / malformed JSON / atomic 上書き）pass。
-  - `progest-tauri` IPC 4 commands: `app_info()` / `search_execute(query)` / `search_history_list()` / `search_history_clear()`。`AppState { project: Mutex<Option<ProjectContext>> }` に `ProjectRoot + StdFileSystem + SqliteIndex` を保持し、起動時 `discover_initial_project`（`PROGEST_PROJECT` env → CWD walk → None、フォールバック失敗でも shell は起動）で attach。`SearchResponse { query, hits, warnings, parse_error }` で parse 失敗を構造化（exit code でなく `parse_error.column` 付き）、validate warnings は string 化、custom_fields は `serde(tag="type", content="value")` でフロントへ。schema.toml ローダは CLI と同じ tiny TOML reader を inline。エラー文字列は `no_project:` プレフィックスでフロント側 `IpcError.isNoProject` 判定。
-  - `app/` 側は `@/lib/ipc.ts`（typed wrappers + `IpcError`）/ `@/components/command-palette.tsx`（window keydown で Cmd+K / Ctrl+K toggle、`CommandDialog` + `shouldFilter={false}`、空入力で recent history を `search_history_list` から表示し「Clear recent queries」アクション付き、非空入力は **200 ms debounce** で `search_execute`、結果行に violations バッジ（naming amber / placement sky / sequence violet）、validate warnings + project name + IPC error は status row に集約、parse error はインライン destructive 表示、no-project は専用 empty state）/ `@/components/result-detail-dialog.tsx`（クリックで開く詳細 Dialog、path / file_id / name / ext / tags / violations / custom_fields をフラットに表示、選択時はパレットを閉じてモーダル重なりを避ける）。`App.tsx` は M0 placeholder を撤去し `<CommandPalette />` + Cmd+K hint。
-  - `mise run check` + `pnpm --filter @progest/app build` green。**UI 動作確認は `tauri dev` + 実プロジェクトでの目視が未実施** — 自動 typecheck/build/clippy が通っているのみ、行動レベルの確認は次セッションで CLAUDE.md §作業パターン4 に沿って行う。
-  - スコープ外（M3 #8 / #9 で合流予定）: tree/flat view、`view.{list,save,delete}` IPC、`accepts.{read,write}` IPC、placement バッジの正式色、ファイル `Reveal in Finder` などの hit クリック後アクション。
+**M3 完了条件（IMPLEMENTATION_PLAN §5）の達成状況:**
+
+- [x] `tag:foo type:psd is:violation` / `is:misplaced` が 100ms 以下で返る — 実装済み（FTS5 trigram + planner SQL、smoke テスト済み）
+- [x] 保存済みビューが永続化される — `views.toml` の read/write + CLI `view {save,delete,list}` + GUI Save-as ダイアログ
+- [x] ディレクトリインスペクターで accepts を編集して `.dirmeta.toml` に反映される — `<DirectoryInspector>` + `accepts_write` IPC + `lintRun` 自動 trigger
+- [x] 全機能の `tauri dev` 実機 smoke テスト完了（2026-04-30）
+
+**M3 で landed した主要成果:**
+
+- `core::search` parser + AST + validate + planner + executor（102 test）
+- FTS5 trigram + `custom_fields` / `violations` テーブル + index migration 0002
+- CLI `search` / `tag` / `view` + reconcile/lint → index hooks
+- shadcn/ui 初期化 + Tailwind v4 + Vite+ 統合
+- コマンドパレット（Cmd+K、200ms debounce、recent history、`>command` モード）
+- tree view + flat view（list/grid + DataTable + 列ソート + カラム可視性）
+- ディレクトリインスペクター（accepts chip 編集 + inherit + mode + alias 展開）
+- ファイルインスペクター（tag chip 編集 + notes textarea 自動保存）
+- project init UI（New / Existing 両フロー + Welcome 画面 + palette コマンド）
+- polish: theme toggle / DSL コンマリスト + `::alias` / 空クエリ全件 / StatusBar
+- toolchain: `@vitejs/plugin-react` v6（oxc）移行 + oxlint warning 修正
+- Tauri IPC: search / history / view / accepts / lint / tag / notes / init / files 全実装
 
 ---
 
