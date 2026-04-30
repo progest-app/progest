@@ -563,3 +563,26 @@
 - gitignore には入っているが、ローカルで build 走らせた直後に `mise run check` すると oxfmt が「フォーマットが乱れた `vite.config.js` を見つけた」と fail する
 - 解決: `app/vite.config.ts` の `fmt.ignorePatterns` に `vite.config.js` / `vite.config.d.ts` を追加（dist/** や registry コンポーネントと同じ枠組み）
 - 場所: `app/vite.config.ts`
+
+---
+
+## 18. thumbnail
+
+### `image` crate 0.25 の WebP エンコーダは lossless のみ
+- `WebPEncoder::new_lossless(w)` が唯一のコンストラクタ。lossy + quality パラメータは未実装
+- 要件の「WebP lossy quality 80」を満たすには `webp` crate（libwebp C wrapper）が必要
+- 256px サムネの lossless WebP は十分小さい（~10-30KB）ので v1 はこれで運用
+
+### `libheif-rs` 1.x の decode は `LibHeif::new()` 経由
+- `ImageHandle::decode()` は存在しない。`LibHeif::new()` → `lib_heif.decode(&handle, color_space, None)` パターン
+- システム `libheif` + `pkgconf` が必要（`brew install libheif pkgconf`）
+- Cargo feature `heic`（default on）で optional にし、ビルド環境がない場合は `--no-default-features` で回避可能
+
+### LRU テストで mtime 精度に注意
+- macOS の mtime 精度は ~1 秒。50ms sleep では同一秒に入り順序不定
+- テストでは `set_modified()` で明示的にタイムスタンプをバックデートする
+
+### `set_var` / `remove_var` は edition 2024 で unsafe
+- Rust edition 2024 以降、`std::env::set_var` / `remove_var` は unsafe function
+- workspace で `unsafe_code = "forbid"` の場合、env var を操作するテストは書けない
+- 代替: 統合テスト側で env var テストするか、env var lookup は trivial なので unit test をスキップ
