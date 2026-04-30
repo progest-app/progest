@@ -23,6 +23,7 @@ import {
   type View,
   type ViewDisplay,
 } from "@/lib/ipc";
+import { FileContextMenu } from "@/components/file-context-menu";
 import { useThumbnails } from "@/lib/use-thumbnails";
 import { useProject } from "@/lib/project-context";
 import { useReportFlatView } from "@/lib/flat-view-context";
@@ -571,33 +572,34 @@ function HitGrid(props: {
       {props.hits.map((hit) => {
         const thumbUrl = props.thumbUrls[hit.file_id];
         return (
-          <button
-            key={hit.file_id}
-            type="button"
-            className="flex flex-col gap-1 rounded-md border p-2 text-left hover:bg-accent"
-            onClick={() => props.onPick?.(hit)}
-          >
-            <div className="flex w-full h-full aspect-square items-center justify-center rounded bg-muted/40 overflow-hidden">
-              {thumbUrl ? (
-                <img
-                  src={thumbUrl}
-                  alt=""
-                  className="size-full object-cover"
-                  loading="lazy"
-                  draggable={false}
-                />
-              ) : (
-                <FileIcon className="size-8 opacity-50" />
-              )}
-            </div>
-            <div className="truncate text-xs font-mono" title={hit.path}>
-              {hit.name ?? hit.path.split("/").pop()}
-            </div>
-            <div className="flex items-center justify-between text-[0.625rem] text-muted-foreground">
-              <span>{hit.kind}</span>
-              <ViolationBadges counts={hit.violations} />
-            </div>
-          </button>
+          <FileContextMenu key={hit.file_id} path={hit.path}>
+            <button
+              type="button"
+              className="flex flex-col gap-1 rounded-md border p-2 text-left hover:bg-accent"
+              onClick={() => props.onPick?.(hit)}
+            >
+              <div className="flex w-full h-full aspect-square items-center justify-center rounded bg-muted/40 overflow-hidden">
+                {thumbUrl ? (
+                  <img
+                    src={thumbUrl}
+                    alt=""
+                    className="size-full object-cover"
+                    loading="lazy"
+                    draggable={false}
+                  />
+                ) : (
+                  <FileIcon className="size-8 opacity-50" />
+                )}
+              </div>
+              <div className="truncate text-xs font-mono" title={hit.path}>
+                {hit.name ?? hit.path.split("/").pop()}
+              </div>
+              <div className="flex items-center justify-between text-[0.625rem] text-muted-foreground">
+                <span>{hit.kind}</span>
+                <ViolationBadges counts={hit.violations} />
+              </div>
+            </button>
+          </FileContextMenu>
         );
       })}
     </div>
