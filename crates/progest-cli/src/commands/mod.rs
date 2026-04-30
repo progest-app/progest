@@ -11,6 +11,7 @@
 //! cleanup pipeline knobs.
 
 pub mod clean;
+pub mod delete;
 pub mod doctor;
 pub mod import;
 pub mod init;

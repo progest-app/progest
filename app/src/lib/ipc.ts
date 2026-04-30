@@ -479,6 +479,36 @@ export async function thumbnailPaths(fileIds: string[]): Promise<ThumbnailPathsR
   }
 }
 
+// --- file delete -----------------------------------------------------------
+
+export type DeletePreview = {
+  path: string;
+  file_id: string;
+  has_sidecar: boolean;
+};
+
+export type DeleteOutcome = {
+  path: string;
+  file_id: string;
+  sidecar_trashed: boolean;
+};
+
+export async function fileDeletePreview(path: string): Promise<DeletePreview> {
+  try {
+    return await invoke<DeletePreview>("file_delete_preview", { path });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function fileDeleteApply(path: string): Promise<DeleteOutcome> {
+  try {
+    return await invoke<DeleteOutcome>("file_delete_apply", { path });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
 // --- lint refresh ----------------------------------------------------------
 
 export type LintRunResponse = {

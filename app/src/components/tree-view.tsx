@@ -2,6 +2,7 @@ import * as React from "react";
 import { ChevronRight, ChevronDown, Folder, FolderOpen, FileIcon } from "lucide-react";
 
 import { useDragActive } from "@/components/drag-drop-overlay";
+import { FileContextMenu } from "@/components/file-context-menu";
 import { filesListDir, IpcError, type DirEntry, type FileEntry } from "@/lib/ipc";
 import { useProject } from "@/lib/project-context";
 
@@ -231,23 +232,26 @@ function FileNode(props: {
   onPick: ((entry: DirEntry) => void) | undefined;
 }) {
   const { entry, depth, onPick } = props;
+  const { bumpRefresh } = useProject();
   const file: FileEntry | undefined = entry.file;
   const indent = depth * 12;
   return (
-    <button
-      type="button"
-      className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-accent"
-      style={{ paddingLeft: indent + 16 }}
-      onClick={() => onPick?.(entry)}
-    >
-      <FileIcon className="size-3.5 opacity-60" />
-      <span className="truncate">{entry.name}</span>
-      {file ? <ViolationDots counts={file.violations} /> : null}
-      {file && file.tags.length > 0 ? (
-        <span className="ml-auto text-[0.625rem] text-muted-foreground">
-          {file.tags.map((t) => `#${t}`).join(" ")}
-        </span>
-      ) : null}
-    </button>
+    <FileContextMenu path={entry.path} onDeleted={bumpRefresh}>
+      <button
+        type="button"
+        className="flex w-full items-center gap-1 rounded px-1 py-0.5 text-left hover:bg-accent"
+        style={{ paddingLeft: indent + 16 }}
+        onClick={() => onPick?.(entry)}
+      >
+        <FileIcon className="size-3.5 opacity-60" />
+        <span className="truncate">{entry.name}</span>
+        {file ? <ViolationDots counts={file.violations} /> : null}
+        {file && file.tags.length > 0 ? (
+          <span className="ml-auto text-[0.625rem] text-muted-foreground">
+            {file.tags.map((t) => `#${t}`).join(" ")}
+          </span>
+        ) : null}
+      </button>
+    </FileContextMenu>
   );
 }

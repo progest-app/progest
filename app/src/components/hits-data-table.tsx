@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ArrowUpDown, ChevronDown, FileIcon } from "lucide-react";
 
+import { FileContextMenu } from "@/components/file-context-menu";
 import {
   Table,
   TableBody,
@@ -159,17 +160,18 @@ export function HitsDataTable(props: {
           </TableRow>
         ) : (
           table.getRowModel().rows.map((row) => (
-            <TableRow
+            <FileContextMenu
               key={row.original.file_id || row.original.path}
-              className="cursor-pointer"
-              onClick={() => props.onPick?.(row.original)}
+              path={row.original.path}
             >
-              {row.getVisibleCells().map((cell) => (
-                <TableCell key={cell.id} className="text-xs">
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </TableCell>
-              ))}
-            </TableRow>
+              <TableRow className="cursor-pointer" onClick={() => props.onPick?.(row.original)}>
+                {row.getVisibleCells().map((cell) => (
+                  <TableCell key={cell.id} className="text-xs">
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                ))}
+              </TableRow>
+            </FileContextMenu>
           ))
         )}
       </TableBody>

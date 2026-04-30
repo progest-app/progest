@@ -112,6 +112,10 @@ function Shell() {
     setSelection({ kind: "dir", path });
   }, []);
 
+  const onFileDeleted = React.useCallback(() => {
+    setSelection(null);
+  }, []);
+
   const selectedDir = selection?.kind === "dir" ? selection.path : "";
 
   // --- import via drag & drop -----------------------------------------------
@@ -150,6 +154,7 @@ function Shell() {
             onSelectDir={onSelectDir}
             panels={panels}
             treeRef={treeRef}
+            onFileDeleted={onFileDeleted}
           />
         ) : (
           <Welcome />
@@ -176,6 +181,7 @@ function MainShell(props: {
   onSelectDir: (path: string) => void;
   panels: PanelVisibility;
   treeRef: React.RefObject<HTMLElement | null>;
+  onFileDeleted: () => void;
 }) {
   const flatRef = React.useRef<HTMLElement>(null);
   const flatDrop = useDropZone(flatRef);
@@ -220,7 +226,7 @@ function MainShell(props: {
       node: (
         <ResizablePanel id="inspector" key="inspector" defaultSize={38} minSize={20}>
           <aside className="h-full overflow-hidden">
-            <InspectorPane selection={props.selection} />
+            <InspectorPane selection={props.selection} onFileDeleted={props.onFileDeleted} />
           </aside>
         </ResizablePanel>
       ),
@@ -246,9 +252,9 @@ function MainShell(props: {
  * on the current selection. Empty selection falls back to the
  * directory inspector at project root, matching the previous default.
  */
-function InspectorPane(props: { selection: Selection }) {
+function InspectorPane(props: { selection: Selection; onFileDeleted?: (() => void) | undefined }) {
   if (props.selection?.kind === "file") {
-    return <FileInspector hit={props.selection.hit} />;
+    return <FileInspector hit={props.selection.hit} onDeleted={props.onFileDeleted} />;
   }
   const dir = props.selection?.kind === "dir" ? props.selection.path : "";
   return <DirectoryInspector dir={dir} />;

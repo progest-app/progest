@@ -11,6 +11,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 
 use commands::clean::{CaseFlag, CleanArgs, FillFlag};
+use commands::delete::DeleteArgs;
 use commands::import::ImportArgs;
 use commands::lint::LintArgs;
 use commands::rename::{RenameArgs, RenameMode};
@@ -132,6 +133,21 @@ enum Command {
         /// numeric index, padding, separator, and extension).
         #[arg(long, value_name = "STEM")]
         sequence_stem: Option<String>,
+    },
+    /// Move a file to the OS trash (and its .meta sidecar if present).
+    Delete {
+        /// Project-relative path to the file to delete.
+        #[arg(value_name = "PATH")]
+        path: String,
+        /// Preview only, don't actually delete.
+        #[arg(long)]
+        dry_run: bool,
+        /// Skip the interactive confirmation prompt.
+        #[arg(long)]
+        force: bool,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: OutputFormat,
     },
     /// Import external files into the project (copy by default, --move to relocate).
     Import {
@@ -433,6 +449,23 @@ fn main() -> Result<ExitCode> {
                     fill_mode,
                     placeholder,
                     sequence_stem,
+                },
+            )?;
+            Ok(to_exit_code(code))
+        }
+        Command::Delete {
+            path,
+            dry_run,
+            force,
+            format,
+        } => {
+            let code = commands::delete::run(
+                &cwd,
+                &DeleteArgs {
+                    path,
+                    dry_run,
+                    force,
+                    format,
                 },
             )?;
             Ok(to_exit_code(code))
