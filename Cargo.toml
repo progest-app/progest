@@ -50,7 +50,7 @@ unicode-normalization = "0.1"
 serde_yaml = "0.9"
 heck = "0.5"
 proptest = "1"
-chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "serde", "clock"] }
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "tiff", "gif", "bmp", "rayon"] }
 psd = "0.3"
 libheif-rs = "1"

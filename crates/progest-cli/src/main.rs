@@ -16,6 +16,7 @@ use commands::lint::LintArgs;
 use commands::rename::{RenameArgs, RenameMode};
 use commands::search::SearchArgs;
 use commands::tag::{TagArgs, TagCommand};
+use commands::template::{TemplateApplyArgs, TemplateExportArgs};
 use commands::thumbnail::{ThumbnailCleanArgs, ThumbnailGenerateArgs};
 use commands::undo::{Direction as UndoDirection, UndoRedoArgs};
 use commands::view::{ViewArgs, ViewCommand};
@@ -47,6 +48,9 @@ enum Command {
         /// Optional display name for the project. Defaults to the directory basename.
         #[arg(long)]
         name: Option<String>,
+        /// Apply a template TOML file after initialization.
+        #[arg(long)]
+        template: Option<PathBuf>,
     },
     /// Walk the project and (re)build the index.
     Scan,
@@ -173,6 +177,11 @@ enum Command {
         #[command(subcommand)]
         op: ViewOp,
     },
+    /// Manage project templates.
+    Template {
+        #[command(subcommand)]
+        op: TemplateOp,
+    },
     /// Generate or manage thumbnail cache.
     Thumbnail {
         #[command(subcommand)]
@@ -275,6 +284,35 @@ enum ViewOp {
 }
 
 #[derive(Debug, Subcommand)]
+enum TemplateOp {
+    /// Export the current project as a template TOML file.
+    Export {
+        /// Output file path (required).
+        #[arg(long)]
+        out: PathBuf,
+        /// Comma-separated list of sections to include: rules, schema, views, dirmeta, or `all`.
+        /// Directory structure is always included.
+        #[arg(long, default_value = "all")]
+        include: String,
+        /// Template name (defaults to the project name).
+        #[arg(long)]
+        name: Option<String>,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: OutputFormat,
+    },
+    /// Apply a template TOML to the current project.
+    Apply {
+        /// Path to the template TOML file.
+        #[arg(value_name = "FILE")]
+        template: PathBuf,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: OutputFormat,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum ThumbnailOp {
     /// Generate thumbnails for project files.
     Generate {
@@ -321,8 +359,8 @@ fn main() -> Result<ExitCode> {
         None => std::env::current_dir()?,
     };
     match cli.command {
-        Command::Init { name } => {
-            commands::init::run(&cwd, name)?;
+        Command::Init { name, template } => {
+            commands::init::run(&cwd, name, template)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Scan => {
@@ -433,6 +471,28 @@ fn main() -> Result<ExitCode> {
                     explain,
                 },
             )?;
+            Ok(to_exit_code(code))
+        }
+        Command::Template { op } => {
+            let code = match op {
+                TemplateOp::Export {
+                    out,
+                    include,
+                    name,
+                    format,
+                } => commands::template::run_export(
+                    &cwd,
+                    &TemplateExportArgs {
+                        out,
+                        include,
+                        name,
+                        format,
+                    },
+                )?,
+                TemplateOp::Apply { template, format } => {
+                    commands::template::run_apply(&cwd, &TemplateApplyArgs { template, format })?
+                }
+            };
             Ok(to_exit_code(code))
         }
         Command::Thumbnail { op } => {
