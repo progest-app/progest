@@ -376,6 +376,108 @@ export async function notesWrite(path: string, body: string): Promise<void> {
   }
 }
 
+// --- import ----------------------------------------------------------------
+
+export type SuggestedDestination = {
+  path: string;
+  score: number;
+};
+
+export type ImportRankingResponse = {
+  suggestions: SuggestedDestination[];
+};
+
+export type ImportRequestWire = {
+  source: string;
+  dest: string;
+  mode?: string; // "copy" (default) | "move"
+  group_id?: string | null;
+};
+
+export type ImportConflict =
+  | { kind: "dest_exists"; existing_path: string }
+  | { kind: "source_missing"; reason: string }
+  | { kind: "source_is_project"; project_path: string }
+  | {
+      kind: "placement_mismatch";
+      expected_exts: string[];
+      suggestion: string | null;
+    };
+
+export type ImportOp = {
+  source: string;
+  dest: string;
+  mode: string;
+  group_id: string | null;
+  conflicts: ImportConflict[];
+};
+
+export type ImportPreview = {
+  ops: ImportOp[];
+  clean: boolean;
+  conflict_count: number;
+};
+
+export type ImportedFile = {
+  source: string;
+  dest: string;
+  file_id: string;
+  mode: string;
+};
+
+export type ImportWarning = {
+  kind: string;
+  dest: string;
+  message: string;
+};
+
+export type ImportOutcome = {
+  batch_id: string;
+  group_id: string | null;
+  imported: ImportedFile[];
+  warnings: ImportWarning[];
+};
+
+export async function importRanking(sources: string[]): Promise<ImportRankingResponse> {
+  try {
+    return await invoke<ImportRankingResponse>("import_ranking", { sources });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function importPreview(requests: ImportRequestWire[]): Promise<ImportPreview> {
+  try {
+    return await invoke<ImportPreview>("import_preview", { requests });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+export async function importApply(requests: ImportRequestWire[]): Promise<ImportOutcome> {
+  try {
+    return await invoke<ImportOutcome>("import_apply", { requests });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
+// --- thumbnail -------------------------------------------------------------
+
+export type ThumbnailPathsResponse = {
+  paths: Record<string, string>;
+};
+
+export async function thumbnailPaths(fileIds: string[]): Promise<ThumbnailPathsResponse> {
+  try {
+    return await invoke<ThumbnailPathsResponse>("thumbnail_paths", {
+      fileIds,
+    });
+  } catch (e) {
+    throw toIpcError(e);
+  }
+}
+
 // --- lint refresh ----------------------------------------------------------
 
 export type LintRunResponse = {

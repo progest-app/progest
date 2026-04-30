@@ -23,6 +23,7 @@ import {
   type View,
   type ViewDisplay,
 } from "@/lib/ipc";
+import { useThumbnails } from "@/lib/use-thumbnails";
 import { useProject } from "@/lib/project-context";
 import { useReportFlatView } from "@/lib/flat-view-context";
 import { Button } from "@/components/ui/button";
@@ -118,6 +119,12 @@ export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
     () => sortHits(response?.hits ?? [], sorting),
     [response, sorting],
   );
+
+  const gridFileIds = React.useMemo(
+    () => (display === "grid" ? sortedHits.map((h) => h.file_id).filter(Boolean) : []),
+    [display, sortedHits],
+  );
+  const thumbUrls = useThumbnails(gridFileIds);
 
   // Mirror project-level state onto the FlatView summary context so
   // <StatusBar> can render the active view + aggregate violation
@@ -375,7 +382,7 @@ export function FlatView(props: { onPickHit?: (hit: RichSearchHit) => void }) {
               onColumnVisibilityChange={setColumnVisibility}
             />
           ) : (
-            <HitGrid hits={sortedHits} onPick={props.onPickHit} />
+            <HitGrid hits={sortedHits} onPick={props.onPickHit} thumbUrls={thumbUrls} />
           )
         ) : null}
       </div>
@@ -553,6 +560,7 @@ function GridSortControls(props: {
 function HitGrid(props: {
   hits: RichSearchHit[];
   onPick: ((hit: RichSearchHit) => void) | undefined;
+  thumbUrls: Record<string, string>;
 }) {
   if (props.hits.length === 0) return <Empty>No results.</Empty>;
   return (
@@ -560,25 +568,38 @@ function HitGrid(props: {
       className="grid gap-2 p-3"
       style={{ gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))" }}
     >
-      {props.hits.map((hit) => (
-        <button
-          key={hit.file_id}
-          type="button"
-          className="flex flex-col gap-1 rounded-md border p-2 text-left hover:bg-accent"
-          onClick={() => props.onPick?.(hit)}
-        >
-          <div className="flex w-full h-full aspect-square items-center justify-center rounded bg-muted/40">
-            <FileIcon className="size-8 opacity-50" />
-          </div>
-          <div className="truncate text-xs font-mono" title={hit.path}>
-            {hit.name ?? hit.path.split("/").pop()}
-          </div>
-          <div className="flex items-center justify-between text-[0.625rem] text-muted-foreground">
-            <span>{hit.kind}</span>
-            <ViolationBadges counts={hit.violations} />
-          </div>
-        </button>
-      ))}
+      {props.hits.map((hit) => {
+        const thumbUrl = props.thumbUrls[hit.file_id];
+        return (
+          <button
+            key={hit.file_id}
+            type="button"
+            className="flex flex-col gap-1 rounded-md border p-2 text-left hover:bg-accent"
+            onClick={() => props.onPick?.(hit)}
+          >
+            <div className="flex w-full h-full aspect-square items-center justify-center rounded bg-muted/40 overflow-hidden">
+              {thumbUrl ? (
+                <img
+                  src={thumbUrl}
+                  alt=""
+                  className="size-full object-cover"
+                  loading="lazy"
+                  draggable={false}
+                />
+              ) : (
+                <FileIcon className="size-8 opacity-50" />
+              )}
+            </div>
+            <div className="truncate text-xs font-mono" title={hit.path}>
+              {hit.name ?? hit.path.split("/").pop()}
+            </div>
+            <div className="flex items-center justify-between text-[0.625rem] text-muted-foreground">
+              <span>{hit.kind}</span>
+              <ViolationBadges counts={hit.violations} />
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }

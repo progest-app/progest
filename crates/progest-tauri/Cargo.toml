@@ -32,6 +32,7 @@ chrono = { workspace = true, features = ["clock"] }
 dirs = "5"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tauri-plugin-drag = "2.1.0"
 
 [lints]
 workspace = true

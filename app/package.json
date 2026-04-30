@@ -15,6 +15,7 @@
     "check": "vp check && tsc --noEmit"
   },
   "dependencies": {
+    "@crabnebula/tauri-plugin-drag": "^2.1.0",
     "@fontsource-variable/geist": "^5.2.8",
     "@fontsource-variable/geist-mono": "^5.2.7",
     "@tailwindcss/vite": "^4.2.4",
