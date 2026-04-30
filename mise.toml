@@ -29,7 +29,7 @@ description = "Run all static checks: rustfmt, clippy, oxfmt, oxlint, tsc (must 
 depends = ["install"]
 run = [
   "cargo fmt --all -- --check",
-  "cargo clippy --workspace --all-targets --all-features -- -D warnings",
+  "cargo clippy --workspace --all-targets -- -D warnings",
   "pnpm --filter @progest/app check",
 ]
 

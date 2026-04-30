@@ -11,8 +11,8 @@ use std::path::{Path, PathBuf};
 use super::document::ProjectError;
 use super::layout::{
     DOT_DIR, HISTORY_DB_FILENAME, INDEX_DB_FILENAME, LOCAL_DIR, PROJECT_TOML_FILENAME,
-    RULES_TOML_FILENAME, SCHEMA_TOML_FILENAME, SEARCH_HISTORY_FILENAME, USER_IGNORE_FILENAME,
-    VIEWS_TOML_FILENAME,
+    RULES_TOML_FILENAME, SCHEMA_TOML_FILENAME, SEARCH_HISTORY_FILENAME, THUMBS_DIR,
+    USER_IGNORE_FILENAME, VIEWS_TOML_FILENAME,
 };
 
 /// Absolute path to a discovered project root.
@@ -125,6 +125,12 @@ impl ProjectRoot {
     #[must_use]
     pub fn views_toml(&self) -> PathBuf {
         self.dot_dir().join(VIEWS_TOML_FILENAME)
+    }
+
+    /// Absolute path of `.progest/thumbs/`.
+    #[must_use]
+    pub fn thumbs_dir(&self) -> PathBuf {
+        self.dot_dir().join(THUMBS_DIR)
     }
 }
 

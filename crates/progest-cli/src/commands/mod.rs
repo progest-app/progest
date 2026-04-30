@@ -19,5 +19,6 @@ pub mod rename;
 pub mod scan;
 pub mod search;
 pub mod tag;
+pub mod thumbnail;
 pub mod undo;
 pub mod view;
