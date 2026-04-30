@@ -6,6 +6,7 @@
 
 mod accepts_commands;
 mod commands;
+mod delete_commands;
 mod file_inspector_commands;
 mod import_commands;
 mod lint_commands;
@@ -83,6 +84,8 @@ pub fn run() {
             import_commands::import_preview,
             import_commands::import_apply,
             thumbnail_commands::thumbnail_paths,
+            delete_commands::file_delete_preview,
+            delete_commands::file_delete_apply,
         ])
         .setup(|app| {
             // We build the main window programmatically rather than via

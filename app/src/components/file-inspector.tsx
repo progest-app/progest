@@ -1,9 +1,28 @@
 import * as React from "react";
-import { Plus, X } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 
-import { IpcError, notesRead, notesWrite, tagAdd, tagRemove, type RichSearchHit } from "@/lib/ipc";
+import {
+  IpcError,
+  fileDeleteApply,
+  fileDeletePreview,
+  notesRead,
+  notesWrite,
+  tagAdd,
+  tagRemove,
+  type DeletePreview,
+  type RichSearchHit,
+} from "@/lib/ipc";
 import { useProject } from "@/lib/project-context";
+import { DotmSquare1 } from "@/components/ui/dotm-square-1";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,8 +44,8 @@ const NOTES_DEBOUNCE_MS = 600;
  * read-only fields but disable the editors — there's nothing in the
  * index to attach the mutation to.
  */
-export function FileInspector(props: { hit: RichSearchHit }) {
-  const { hit } = props;
+export function FileInspector(props: { hit: RichSearchHit; onDeleted?: (() => void) | undefined }) {
+  const { hit, onDeleted } = props;
   const isIndexed = hit.file_id.length > 0;
 
   return (
@@ -46,8 +65,94 @@ export function FileInspector(props: { hit: RichSearchHit }) {
             reconcile) before editing tags or notes.
           </div>
         ) : null}
+        {isIndexed ? <DeleteSection path={hit.path} onDeleted={onDeleted} /> : null}
       </div>
     </div>
+  );
+}
+
+function DeleteSection(props: { path: string; onDeleted?: (() => void) | undefined }) {
+  const { bumpRefresh } = useProject();
+  const [confirmOpen, setConfirmOpen] = React.useState(false);
+  const [preview, setPreview] = React.useState<DeletePreview | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const openConfirm = async () => {
+    setError(null);
+    try {
+      const p = await fileDeletePreview(props.path);
+      setPreview(p);
+      setConfirmOpen(true);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const handleDelete = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await fileDeleteApply(props.path);
+      setConfirmOpen(false);
+      bumpRefresh();
+      props.onDeleted?.();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const filename = props.path.split("/").pop() ?? props.path;
+
+  return (
+    <>
+      <div className="mt-2 border-t pt-3">
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+          onClick={() => void openConfirm()}
+        >
+          <Trash2 className="size-3.5 mr-1" />
+          Move to Trash
+        </Button>
+        {error ? <div className="mt-1 text-destructive">{error}</div> : null}
+      </div>
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Move to Trash?</DialogTitle>
+            <DialogDescription>
+              This will move the file to the OS trash. You can restore it from the trash later.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded border bg-muted/30 p-2 text-xs font-mono space-y-0.5">
+            <div className="truncate">{filename}</div>
+            {preview?.has_sidecar ? (
+              <div className="text-muted-foreground">+ .meta sidecar</div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => void handleDelete()} disabled={busy}>
+              {busy ? (
+                <>
+                  <DotmSquare1 size={16} dotSize={2} animated className="mr-1.5" />
+                  Deleting…
+                </>
+              ) : (
+                "Move to Trash"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
