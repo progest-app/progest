@@ -13,6 +13,7 @@ pub mod accepts;
 pub mod fs;
 pub mod history;
 pub mod identity;
+pub mod import;
 pub mod index;
 pub mod lint;
 pub mod meta;
