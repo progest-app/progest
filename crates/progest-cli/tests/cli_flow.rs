@@ -12,7 +12,7 @@ use std::process::Output;
 
 use tempfile::TempDir;
 
-use support::run;
+use support::{init_project, run, write_file};
 
 fn stdout_of(output: &Output) -> String {
     String::from_utf8_lossy(&output.stdout).into_owned()
@@ -96,5 +96,30 @@ fn scan_outside_a_project_errors() {
     assert!(
         stderr.contains("could not find a Progest project"),
         "unexpected stderr: {stderr}"
+    );
+}
+
+#[test]
+fn global_project_flag_overrides_cwd() {
+    let project = TempDir::new().unwrap();
+    init_project(project.path(), "remote-project").unwrap();
+    write_file(project.path(), "hero.psd", "bytes").unwrap();
+
+    // Run scan from a completely unrelated directory, pointing -p at
+    // the actual project.
+    let unrelated = TempDir::new().unwrap();
+    let out = run(
+        unrelated.path(),
+        &["-p", project.path().to_str().unwrap(), "scan"],
+    );
+    assert!(
+        out.status.success(),
+        "scan with -p failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = stdout_of(&out);
+    assert!(
+        stdout.contains("added"),
+        "expected scan to find files via -p, got: {stdout}"
     );
 }
