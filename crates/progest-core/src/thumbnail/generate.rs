@@ -318,11 +318,11 @@ mod tests {
         let cache = ThumbnailCache::new(tmp.path().join("thumbs"), 1_000_000);
         let req = sample_request(&src);
 
-        let r1 = generate_batch(&[req.clone()], &cache, false);
+        let r1 = generate_batch(std::slice::from_ref(&req), &cache, false);
         assert_eq!(r1.generated, 1);
         assert_eq!(r1.cached, 0);
 
-        let r2 = generate_batch(&[req], &cache, false);
+        let r2 = generate_batch(std::slice::from_ref(&req), &cache, false);
         assert_eq!(r2.generated, 0);
         assert_eq!(r2.cached, 1);
     }
@@ -336,8 +336,8 @@ mod tests {
         let cache = ThumbnailCache::new(tmp.path().join("thumbs"), 1_000_000);
         let req = sample_request(&src);
 
-        generate_batch(&[req.clone()], &cache, false);
-        let r2 = generate_batch(&[req], &cache, true);
+        generate_batch(std::slice::from_ref(&req), &cache, false);
+        let r2 = generate_batch(std::slice::from_ref(&req), &cache, true);
         assert_eq!(r2.generated, 1);
         assert_eq!(r2.cached, 0);
     }
