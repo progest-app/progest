@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ChevronRight, ChevronDown, Folder, FolderOpen, FileIcon } from "lucide-react";
 
+import { useDragActive } from "@/components/drag-drop-overlay";
 import { filesListDir, IpcError, type DirEntry, type FileEntry } from "@/lib/ipc";
 import { useProject } from "@/lib/project-context";
 
@@ -19,6 +20,8 @@ export function TreeView(props: {
   onPickFile?: (entry: DirEntry) => void;
   selectedDir?: string;
   onSelectDir?: (path: string) => void;
+  /** Ref updated with the path of the directory currently under the drag cursor. */
+  dragHoverDirRef?: React.MutableRefObject<string | null>;
 }) {
   const { project, refreshTick } = useProject();
   // path "" = root; cache keeps loaded children + error per path so
@@ -83,6 +86,8 @@ export function TreeView(props: {
     [expanded, cache, fetchDir],
   );
 
+  const dragState = useDragActive();
+
   return (
     <nav className="h-full overflow-auto p-1 text-xs">
       <DirNode
@@ -95,6 +100,9 @@ export function TreeView(props: {
         onPickFile={props.onPickFile}
         selectedDir={props.selectedDir}
         onSelectDir={props.onSelectDir}
+        dragActive={dragState.active}
+        dragPosition={dragState.position}
+        dragHoverDirRef={props.dragHoverDirRef}
       />
     </nav>
   );
@@ -110,20 +118,57 @@ function DirNode(props: {
   onPickFile: ((entry: DirEntry) => void) | undefined;
   selectedDir: string | undefined;
   onSelectDir: ((path: string) => void) | undefined;
+  dragActive: boolean;
+  dragPosition: { x: number; y: number } | null;
+  dragHoverDirRef: React.MutableRefObject<string | null> | undefined;
 }) {
-  const { path, name, depth, expanded, cache, toggle, onPickFile, selectedDir, onSelectDir } =
-    props;
+  const {
+    path,
+    name,
+    depth,
+    expanded,
+    cache,
+    toggle,
+    onPickFile,
+    selectedDir,
+    onSelectDir,
+    dragActive,
+    dragPosition,
+    dragHoverDirRef,
+  } = props;
   const isOpen = expanded.has(path);
   const isSelected = selectedDir === path;
   const entry = cache[path];
   const indent = depth * 12;
+
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const isDragOver =
+    dragActive &&
+    dragPosition != null &&
+    btnRef.current != null &&
+    (() => {
+      const rect = btnRef.current!.getBoundingClientRect();
+      return (
+        dragPosition.x >= rect.left &&
+        dragPosition.x <= rect.right &&
+        dragPosition.y >= rect.top &&
+        dragPosition.y <= rect.bottom
+      );
+    })();
+
+  if (isDragOver && dragHoverDirRef) {
+    dragHoverDirRef.current = path;
+  }
+
   return (
     <div>
       <button
+        ref={btnRef}
         type="button"
         className={cn(
           "flex w-full items-center gap-1 rounded px-1 py-0.5 hover:bg-accent",
           isSelected && "bg-accent text-accent-foreground",
+          isDragOver && "bg-primary/20 ring-1 ring-primary/50",
         )}
         style={{ paddingLeft: indent + 4 }}
         onClick={() => {
@@ -173,6 +218,9 @@ function DirNode(props: {
                   onPickFile={onPickFile}
                   selectedDir={selectedDir}
                   onSelectDir={onSelectDir}
+                  dragActive={dragActive}
+                  dragPosition={dragPosition}
+                  dragHoverDirRef={dragHoverDirRef}
                 />
               ) : (
                 <FileNode key={child.path} entry={child} depth={depth + 1} onPick={onPickFile} />

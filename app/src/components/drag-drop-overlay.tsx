@@ -42,6 +42,14 @@ export function useDropZone(ref: React.RefObject<HTMLElement | null>): {
 }
 
 /**
+ * Expose the raw drag state for components that need fine-grained
+ * hit-testing (e.g. TreeView folder highlight).
+ */
+export function useDragActive(): DragDropState {
+  return React.useContext(DragDropCtx).state;
+}
+
+/**
  * Full-window provider that listens to Tauri's native drag-drop events.
  * Individual panes use `useDropZone(ref)` to show per-pane overlays.
  *

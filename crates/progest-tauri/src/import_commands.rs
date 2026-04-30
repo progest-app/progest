@@ -35,6 +35,7 @@ pub struct SuggestedDestinationWire {
 #[derive(Debug, Clone, Serialize)]
 pub struct ImportRankingResponse {
     pub suggestions: Vec<SuggestedDestinationWire>,
+    pub all_dirs: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -127,18 +128,18 @@ pub fn import_ranking(
         })
         .collect();
 
+    let all_dirs = collect_all_dirs(ctx);
+
     if exts.is_empty() {
         return Ok(ImportRankingResponse {
             suggestions: Vec::new(),
+            all_dirs,
         });
     }
 
     let catalog = load_alias_catalog_for_ctx(ctx);
     let dirs = collect_dirmeta_effective_accepts(ctx, &catalog);
 
-    // Use the first file's extension for ranking (batch imports usually
-    // share the same type; multi-type imports show per-file suggestions
-    // in the preview).
     let ext = normalize_ext(&exts[0]);
     let ranked = rank_destinations(&dirs, &ext);
 
@@ -150,6 +151,7 @@ pub fn import_ranking(
                 score: s.score,
             })
             .collect(),
+        all_dirs,
     })
 }
 
@@ -418,4 +420,37 @@ fn compute_effective_for_dir(
 
     let chain_refs: Vec<_> = chain_raws.iter().collect();
     compute_effective_accepts(own.as_ref(), &chain_refs, catalog).ok()?
+}
+
+/// Recursively collect all directory paths in the project (sorted).
+fn collect_all_dirs(ctx: &ProjectContext) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut stack: Vec<(String, PathBuf)> = vec![(String::new(), ctx.root.root().to_path_buf())];
+
+    while let Some((rel, abs)) = stack.pop() {
+        if !rel.is_empty() {
+            result.push(rel.clone());
+        }
+        let Ok(entries) = std::fs::read_dir(&abs) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            if !entry.file_type().is_ok_and(|ft| ft.is_dir()) {
+                continue;
+            }
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name.starts_with('.') {
+                continue;
+            }
+            let child = if rel.is_empty() {
+                name
+            } else {
+                format!("{rel}/{name}")
+            };
+            stack.push((child, entry.path()));
+        }
+    }
+
+    result.sort();
+    result
 }

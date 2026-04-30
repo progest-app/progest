@@ -118,16 +118,15 @@ function Shell() {
   const [importDest, setImportDest] = React.useState<string | undefined>();
   const [importOpen, setImportOpen] = React.useState(false);
 
-  // Refs for the tree and flat panes — used to determine which pane
-  // received the drop so we can pre-select the destination.
   const treeRef = React.useRef<HTMLElement>(null);
+  const dragHoverDirRef = React.useRef<string | null>(null);
 
   const handleDrop = React.useCallback(
     (paths: string[], position: { x: number; y: number }) => {
       if (!project || paths.length === 0) return;
 
-      // If the drop lands on the tree pane, use the currently selected
-      // directory as the destination; otherwise leave it to ranking.
+      // If the drop lands on the tree pane and a specific folder is
+      // highlighted, use that folder as the destination.
       let dest: string | undefined;
       if (treeRef.current) {
         const rect = treeRef.current.getBoundingClientRect();
@@ -135,17 +134,19 @@ function Shell() {
           position.x >= rect.left &&
           position.x <= rect.right &&
           position.y >= rect.top &&
-          position.y <= rect.bottom
+          position.y <= rect.bottom &&
+          dragHoverDirRef.current != null
         ) {
-          dest = selectedDir || undefined;
+          dest = dragHoverDirRef.current;
         }
       }
+      dragHoverDirRef.current = null;
 
       setImportSources(paths);
       setImportDest(dest);
       setImportOpen(true);
     },
-    [project, selectedDir],
+    [project],
   );
 
   return (
@@ -161,6 +162,7 @@ function Shell() {
             onSelectDir={onSelectDir}
             panels={panels}
             treeRef={treeRef}
+            dragHoverDirRef={dragHoverDirRef}
           />
         ) : (
           <Welcome />
@@ -187,9 +189,9 @@ function MainShell(props: {
   onSelectDir: (path: string) => void;
   panels: PanelVisibility;
   treeRef: React.RefObject<HTMLElement | null>;
+  dragHoverDirRef: React.MutableRefObject<string | null>;
 }) {
   const flatRef = React.useRef<HTMLElement>(null);
-  const treeDrop = useDropZone(props.treeRef);
   const flatDrop = useDropZone(flatRef);
 
   const panes: { key: PanelKey; node: React.ReactNode }[] = [];
@@ -198,16 +200,12 @@ function MainShell(props: {
       key: "tree",
       node: (
         <ResizablePanel id="tree" key="tree" defaultSize={22} minSize={12}>
-          <aside ref={props.treeRef} className="relative h-full overflow-hidden">
+          <aside ref={props.treeRef} className="h-full overflow-hidden">
             <TreeView
               onPickFile={props.onPickTreeFile}
               selectedDir={props.selectedDir}
               onSelectDir={props.onSelectDir}
-            />
-            <DropOverlay
-              isOver={treeDrop.isOver}
-              fileCount={treeDrop.fileCount}
-              label={props.selectedDir ? `→ ${props.selectedDir}` : "Select a directory first"}
+              dragHoverDirRef={props.dragHoverDirRef}
             />
           </aside>
         </ResizablePanel>

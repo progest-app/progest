@@ -1,5 +1,15 @@
 import * as React from "react";
-import { AlertTriangle, Check, Copy, FileWarning, FolderInput, Scissors } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronsUpDown,
+  Copy,
+  FileWarning,
+  Folder,
+  FolderInput,
+  Scissors,
+  Star,
+} from "lucide-react";
 
 import {
   importApply,
@@ -15,6 +25,13 @@ import {
 import { useProject } from "@/lib/project-context";
 import { Button } from "@/components/ui/button";
 import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+} from "@/components/ui/command";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -22,22 +39,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type ImportModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Absolute paths of files dropped by the user. */
   sources: string[];
-  /** Pre-selected destination directory (from TreeView drop). */
   initialDest: string | undefined;
 };
 
@@ -48,12 +56,13 @@ export function ImportModal(props: ImportModalProps) {
   const [mode, setMode] = React.useState<"copy" | "move">("copy");
   const [dest, setDest] = React.useState("");
   const [suggestions, setSuggestions] = React.useState<SuggestedDestination[]>([]);
+  const [allDirs, setAllDirs] = React.useState<string[]>([]);
   const [preview, setPreview] = React.useState<ImportPreview | null>(null);
   const [outcome, setOutcome] = React.useState<ImportOutcome | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [dirPickerOpen, setDirPickerOpen] = React.useState(false);
 
-  // Fetch ranking suggestions when the modal opens.
   React.useEffect(() => {
     if (!open || sources.length === 0) return;
     setDest(initialDest ?? "");
@@ -62,21 +71,20 @@ export function ImportModal(props: ImportModalProps) {
     setError(null);
     setMode("copy");
     setSuggestions([]);
+    setAllDirs([]);
 
     importRanking(sources)
       .then((resp) => {
         setSuggestions(resp.suggestions);
+        setAllDirs(resp.all_dirs);
         const first = resp.suggestions[0];
         if (!initialDest && first) {
           setDest(first.path);
         }
       })
-      .catch(() => {
-        // Non-fatal — user can still type a dest.
-      });
+      .catch(() => {});
   }, [open, sources, initialDest]);
 
-  // Build preview whenever dest or mode changes.
   React.useEffect(() => {
     if (!open || sources.length === 0) return;
     if (!dest && !initialDest) {
@@ -126,6 +134,11 @@ export function ImportModal(props: ImportModalProps) {
   }, [preview, sources, dest, mode, bumpRefresh]);
 
   const fileNames = React.useMemo(() => sources.map((s) => s.split("/").pop() ?? s), [sources]);
+
+  const suggestedPaths = React.useMemo(
+    () => new Set(suggestions.map((s) => s.path)),
+    [suggestions],
+  );
 
   if (outcome) {
     return (
@@ -191,38 +204,81 @@ export function ImportModal(props: ImportModalProps) {
             ))}
           </div>
 
-          {/* Destination */}
+          {/* Destination — combobox with autocomplete */}
           <div className="grid gap-1.5">
-            <Label htmlFor="import-dest">Destination directory</Label>
-            {suggestions.length > 0 ? (
-              <Select value={dest} onValueChange={setDest}>
-                <SelectTrigger id="import-dest">
-                  <SelectValue placeholder="Select destination…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {suggestions.map((s) => (
-                    <SelectItem key={s.path} value={s.path}>
-                      <span className="font-mono text-xs">{s.path || "(project root)"}</span>
-                      <span className="ml-2 text-muted-foreground">
-                        {s.score === 3
-                          ? "exact match"
-                          : s.score === 2
-                            ? "alias match"
-                            : "inherited"}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input
-                id="import-dest"
-                value={dest}
-                onChange={(e) => setDest(e.target.value)}
-                placeholder="e.g. assets/textures"
-                className="font-mono text-xs"
-              />
-            )}
+            <Label>Destination directory</Label>
+            <Popover open={dirPickerOpen} onOpenChange={setDirPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={dirPickerOpen}
+                  className="justify-between font-mono text-xs h-9"
+                >
+                  <span className="truncate">{dest || "(project root)"}</span>
+                  <ChevronsUpDown className="ml-2 size-3.5 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Search directories…" className="text-xs" />
+                  <CommandEmpty>No directory found.</CommandEmpty>
+                  {suggestions.length > 0 ? (
+                    <CommandGroup heading="Suggested">
+                      {suggestions.map((s) => (
+                        <CommandItem
+                          key={`suggest-${s.path}`}
+                          value={s.path || "(root)"}
+                          onSelect={() => {
+                            setDest(s.path);
+                            setDirPickerOpen(false);
+                          }}
+                          className="text-xs font-mono"
+                        >
+                          <Star className="mr-1.5 size-3 text-primary shrink-0" />
+                          <span className="truncate">{s.path || "(project root)"}</span>
+                          <span className="ml-auto text-[0.625rem] text-muted-foreground shrink-0">
+                            {scoreLabel(s.score)}
+                          </span>
+                          {dest === s.path ? <Check className="ml-1 size-3 shrink-0" /> : null}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  ) : null}
+                  <CommandGroup heading="All directories" className="max-h-48 overflow-auto">
+                    <CommandItem
+                      value="(root)"
+                      onSelect={() => {
+                        setDest("");
+                        setDirPickerOpen(false);
+                      }}
+                      className="text-xs font-mono"
+                    >
+                      <Folder className="mr-1.5 size-3 shrink-0" />
+                      (project root)
+                      {dest === "" ? <Check className="ml-auto size-3 shrink-0" /> : null}
+                    </CommandItem>
+                    {allDirs
+                      .filter((d) => !suggestedPaths.has(d))
+                      .map((d) => (
+                        <CommandItem
+                          key={d}
+                          value={d}
+                          onSelect={() => {
+                            setDest(d);
+                            setDirPickerOpen(false);
+                          }}
+                          className="text-xs font-mono"
+                        >
+                          <Folder className="mr-1.5 size-3 shrink-0" />
+                          <span className="truncate">{d}</span>
+                          {dest === d ? <Check className="ml-auto size-3 shrink-0" /> : null}
+                        </CommandItem>
+                      ))}
+                  </CommandGroup>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Mode toggle */}
@@ -289,6 +345,12 @@ export function ImportModal(props: ImportModalProps) {
       </DialogContent>
     </Dialog>
   );
+}
+
+function scoreLabel(score: number): string {
+  if (score === 3) return "exact";
+  if (score === 2) return "alias";
+  return "inherited";
 }
 
 function ConflictRow(props: { op: ImportOp }) {

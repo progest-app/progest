@@ -385,6 +385,7 @@ export type SuggestedDestination = {
 
 export type ImportRankingResponse = {
   suggestions: SuggestedDestination[];
+  all_dirs: string[];
 };
 
 export type ImportRequestWire = {
