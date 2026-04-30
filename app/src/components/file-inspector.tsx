@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Plus, Trash2, X } from "lucide-react";
+import { toast } from "sonner";
 
 import {
   IpcError,
@@ -96,6 +97,7 @@ function DeleteSection(props: { path: string; onDeleted?: (() => void) | undefin
       await fileDeleteApply(props.path);
       setConfirmOpen(false);
       bumpRefresh();
+      toast.success("Moved to Trash", { description: filename });
       props.onDeleted?.();
     } catch (e) {
       setError(String(e));

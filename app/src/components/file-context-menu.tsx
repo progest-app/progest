@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 import { fileDeleteApply, fileDeletePreview, type DeletePreview } from "@/lib/ipc";
 import { useProject } from "@/lib/project-context";
@@ -51,6 +52,7 @@ export function FileContextMenu(props: FileContextMenuProps) {
       await fileDeleteApply(props.path);
       setConfirmOpen(false);
       bumpRefresh();
+      toast.success("Moved to Trash", { description: filename });
       props.onDeleted?.();
     } catch (e) {
       setError(String(e));

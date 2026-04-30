@@ -11,6 +11,8 @@ import {
   Star,
 } from "lucide-react";
 
+import { toast } from "sonner";
+
 import { DotmSquare8 } from "@/components/ui/dotm-square-8";
 
 import {
@@ -19,7 +21,6 @@ import {
   importRanking,
   type ImportConflict,
   type ImportOp,
-  type ImportOutcome,
   type ImportPreview,
   type ImportRequestWire,
   type SuggestedDestination,
@@ -60,7 +61,6 @@ export function ImportModal(props: ImportModalProps) {
   const [suggestions, setSuggestions] = React.useState<SuggestedDestination[]>([]);
   const [allDirs, setAllDirs] = React.useState<string[]>([]);
   const [preview, setPreview] = React.useState<ImportPreview | null>(null);
-  const [outcome, setOutcome] = React.useState<ImportOutcome | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [dirPickerOpen, setDirPickerOpen] = React.useState(false);
@@ -69,7 +69,6 @@ export function ImportModal(props: ImportModalProps) {
     if (!open || sources.length === 0) return;
     setDest(initialDest ?? "");
     setPreview(null);
-    setOutcome(null);
     setError(null);
     setMode("copy");
     setSuggestions([]);
@@ -126,8 +125,17 @@ export function ImportModal(props: ImportModalProps) {
         return { source: src, dest: destPath, mode };
       });
       const result = await importApply(requests);
-      setOutcome(result);
       bumpRefresh();
+      onOpenChange(false);
+      const count = result.imported.length;
+      const warnCount = result.warnings.length;
+      if (warnCount > 0) {
+        toast.warning(
+          `Imported ${count} file${count === 1 ? "" : "s"} with ${warnCount} warning${warnCount === 1 ? "" : "s"}`,
+        );
+      } else {
+        toast.success(`Imported ${count} file${count === 1 ? "" : "s"}`);
+      }
     } catch (e) {
       setError(String(e));
     } finally {
@@ -141,49 +149,6 @@ export function ImportModal(props: ImportModalProps) {
     () => new Set(suggestions.map((s) => s.path)),
     [suggestions],
   );
-
-  if (outcome) {
-    return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Check className="size-5 text-green-500" />
-              Import complete
-            </DialogTitle>
-            <DialogDescription>
-              {outcome.imported.length} file{outcome.imported.length === 1 ? "" : "s"} imported
-              {outcome.warnings.length > 0 ? ` with ${outcome.warnings.length} warning(s)` : ""}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="max-h-48 overflow-auto text-xs font-mono space-y-0.5">
-            {outcome.imported.map((f) => (
-              <div key={f.dest} className="flex items-center gap-1.5 text-muted-foreground">
-                {f.mode === "move" ? (
-                  <Scissors className="size-3 shrink-0" />
-                ) : (
-                  <Copy className="size-3 shrink-0" />
-                )}
-                <span className="truncate">{f.dest}</span>
-              </div>
-            ))}
-          </div>
-          {outcome.warnings.length > 0 ? (
-            <div className="rounded border border-warning/30 bg-warning/5 p-2 text-xs space-y-0.5">
-              {outcome.warnings.map((w, i) => (
-                <div key={`${w.dest}-${i}`} className="text-warning">
-                  {w.kind}: {w.message}
-                </div>
-              ))}
-            </div>
-          ) : null}
-          <DialogFooter>
-            <Button onClick={() => onOpenChange(false)}>Done</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    );
-  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
