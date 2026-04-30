@@ -465,8 +465,8 @@ function sortHits(hits: RichSearchHit[], sorting: SortingState): RichSearchHit[]
   if (sorting.length === 0 || !sorting[0]) return hits;
   const { id, desc } = sorting[0];
   const col = id as HitsColumnId;
-  const sorted = [...hits].sort((a, b) => compareHits(a, b, col));
-  return desc ? sorted.reverse() : sorted;
+  const sorted = [...hits].toSorted((a, b) => compareHits(a, b, col));
+  return desc ? sorted.toReversed() : sorted;
 }
 
 function compareHits(a: RichSearchHit, b: RichSearchHit, col: HitsColumnId): number {
