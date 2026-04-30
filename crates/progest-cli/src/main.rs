@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 
 use commands::clean::{CaseFlag, CleanArgs, FillFlag};
@@ -30,6 +30,11 @@ mod walk;
 #[derive(Debug, Parser)]
 #[command(name = "progest", version, about, long_about = None)]
 struct Cli {
+    /// Path to the Progest project root. Defaults to discovering the
+    /// nearest `.progest/` directory from the current working directory.
+    #[arg(short = 'p', long = "project", global = true)]
+    project: Option<PathBuf>,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -278,7 +283,11 @@ fn main() -> Result<ExitCode> {
         .init();
 
     let cli = Cli::parse();
-    let cwd = std::env::current_dir()?;
+    let cwd = match cli.project {
+        Some(ref p) => std::fs::canonicalize(p)
+            .with_context(|| format!("resolving project path `{}`", p.display()))?,
+        None => std::env::current_dir()?,
+    };
     match cli.command {
         Command::Init { name } => {
             commands::init::run(&cwd, name)?;
