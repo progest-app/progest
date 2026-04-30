@@ -383,14 +383,18 @@ DSL の正規仕様は [`docs/SEARCH_DSL.md`](./SEARCH_DSL.md)、進行中の引
 ### M4 — サムネ + 外部連携 + AI + テンプレート（1ヶ月）
 **目的**: 価値提案を完成させる。accepts を踏まえた D&D import / CLI import もここで完結する。
 
-- `core::thumbnail` — 生成キュー、LRU キャッシュ
-  - 画像（image crate）→ 動画（ffmpeg 子プロセス）→ PSD（psd crate）の順で実装
-- `core::import` — インポート実体（copy / move）、原子トランザクション、accepts ランキング + rename preview の一体適用、history への単一エントリ記録
-- 外部連携: D&D 受入（flat view は accepts サジェスト、tree view は mismatch 確認ダイアログ）、外部アプリで開く、D&D 出
+進行中の引き継ぎは [`docs/M4_HANDOFF.md`](./M4_HANDOFF.md)。
+
+着手順序: import → thumbnail → template → AI（CLI first → D&D/UI）。PR はフェーズ単位（5〜7 PR 想定）。
+
+- `core::import` — copy（デフォルト）/ move（`--move`）、accepts ランキング（`suggested_destinations`）、import preview + atomic apply（stage→commit→rollback、rename と同パターン）、history `Operation::Import`、sequence 集約、Conflict 4 種（DestExists / SourceMissing / SourceIsProject / PlacementMismatch）、`ApplyWarning::ImportFailed` variant 追加、Conflict ↔ Warning 語彙整理
+- CLI: `progest import <files...> [--dest|--auto|--move|--dry-run|--format json|text]`（対話 / 非対話両対応、tty 検出、sequence 集約表示）
+- `core::thumbnail` — 生成キュー、LRU キャッシュ（`.progest/thumbs/<file_id>.webp`）、WebP lossy quality 80 長辺 256px
+  - 画像（image crate）→ PSD（psd crate）→ 動画（ffmpeg sidecar、LGPL 準拠で子プロセス呼び出し、`LICENSES/ffmpeg/` 既設）
+- 外部連携: D&D 受入（flat view は accepts サジェスト、tree view は mismatch 確認ダイアログ）+ thumbnail 統合（grid view サムネ表示）、外部アプリで開く、D&D 出
 - 複数ファイルの一括 import UI（一覧確認モーダル）
-- CLI: `progest import <files...> [--dest|--auto|--move|--dry-run|--format json|text]`（対話 / 非対話両対応、tty 検出）
-- `core::template` — 書出・読込、`progest init --template <path>`、テンプレートに `.dirmeta.toml`（accepts）を含める
-- `core::ai` — BYOK クライアント、keychain 連携、簡易 UI
+- `core::template` — 書出・読込、`progest init --template <path>`、テンプレートに `.dirmeta.toml`（accepts）を含める、GUI テンプレート選択
+- `core::ai` — BYOK クライアント（Anthropic / OpenAI）、keychain 連携、命名提案 + タグ提案 + notes 自動生成 + 配置先提案
 
 完了条件: 画像・動画・PSD のサムネが出る、D&D でファイル追加（accepts サジェストが動く）、CLI `progest import` が対話・非対話両方で動く、テンプレートから空プロジェクトが作れる（accepts 含む）、AI 提案が動く。
 
