@@ -1,6 +1,11 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "ignorePatterns": ["dist/**", "src/components/ui/**"],
+  "ignorePatterns": [
+    "dist/**",
+    "src/components/ui/**",
+    "src/lib/dotmatrix-*.ts*",
+    "src/components/dotmatrix-*.css"
+  ],
   "categories": {
     "correctness": "error",
     "suspicious": "warn",

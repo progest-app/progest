@@ -7,11 +7,13 @@
 mod accepts_commands;
 mod commands;
 mod file_inspector_commands;
+mod import_commands;
 mod lint_commands;
 mod project_init_commands;
 mod recent;
 mod state;
 mod template_commands;
+mod thumbnail_commands;
 
 use state::AppState;
 
@@ -47,6 +49,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_drag::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
@@ -76,6 +79,10 @@ pub fn run() {
             template_commands::template_export,
             template_commands::template_preview,
             template_commands::template_apply,
+            import_commands::import_ranking,
+            import_commands::import_preview,
+            import_commands::import_apply,
+            thumbnail_commands::thumbnail_paths,
         ])
         .setup(|app| {
             // We build the main window programmatically rather than via

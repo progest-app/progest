@@ -1,6 +1,7 @@
 import * as React from "react";
 import { ChevronRight, ChevronDown, Folder, FolderOpen, FileIcon } from "lucide-react";
 
+import { useDragActive } from "@/components/drag-drop-overlay";
 import { filesListDir, IpcError, type DirEntry, type FileEntry } from "@/lib/ipc";
 import { useProject } from "@/lib/project-context";
 
@@ -15,14 +16,24 @@ type DirState = {
   error?: string;
 };
 
+/**
+ * Given a CSS-pixel position, find the closest `[data-dir-path]`
+ * ancestor of the element under that point.  Returns the path string
+ * or `null` if the cursor is not over any DirNode.
+ */
+export function dirPathAtPoint(pos: { x: number; y: number }): string | null {
+  const el = document.elementFromPoint(pos.x, pos.y);
+  const btn = el?.closest("[data-dir-path]");
+  if (!btn) return null;
+  return btn.getAttribute("data-dir-path");
+}
+
 export function TreeView(props: {
   onPickFile?: (entry: DirEntry) => void;
   selectedDir?: string;
   onSelectDir?: (path: string) => void;
 }) {
   const { project, refreshTick } = useProject();
-  // path "" = root; cache keeps loaded children + error per path so
-  // collapsing/re-expanding doesn't re-fetch.
   const [cache, setCache] = React.useState<Record<string, DirState>>({});
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set([""]));
 
@@ -43,20 +54,12 @@ export function TreeView(props: {
     }
   }, []);
 
-  // Reset cache + expanded set when the attached project changes,
-  // then refetch the new root. Without this, the tree would keep
-  // showing the old project's directory snapshot until the user
-  // collapsed and re-expanded each branch.
   React.useEffect(() => {
     setCache({});
     setExpanded(new Set([""]));
     void fetchDir("");
   }, [project?.root, fetchDir]);
 
-  // `refreshTick` is bumped by long-lived workflows that mutate
-  // indexed state (accepts edits → lint refresh). Drop the cache and
-  // re-fetch every currently-expanded path so the badges update
-  // without forcing the user to collapse / re-expand each branch.
   const expandedSnapshot = React.useRef(expanded);
   expandedSnapshot.current = expanded;
   React.useEffect(() => {
@@ -83,6 +86,8 @@ export function TreeView(props: {
     [expanded, cache, fetchDir],
   );
 
+  const dragState = useDragActive();
+
   return (
     <nav className="h-full overflow-auto p-1 text-xs">
       <DirNode
@@ -95,6 +100,8 @@ export function TreeView(props: {
         onPickFile={props.onPickFile}
         selectedDir={props.selectedDir}
         onSelectDir={props.onSelectDir}
+        dragActive={dragState.active}
+        dragPosition={dragState.position}
       />
     </nav>
   );
@@ -110,20 +117,52 @@ function DirNode(props: {
   onPickFile: ((entry: DirEntry) => void) | undefined;
   selectedDir: string | undefined;
   onSelectDir: ((path: string) => void) | undefined;
+  dragActive: boolean;
+  dragPosition: { x: number; y: number } | null;
 }) {
-  const { path, name, depth, expanded, cache, toggle, onPickFile, selectedDir, onSelectDir } =
-    props;
+  const {
+    path,
+    name,
+    depth,
+    expanded,
+    cache,
+    toggle,
+    onPickFile,
+    selectedDir,
+    onSelectDir,
+    dragActive,
+    dragPosition,
+  } = props;
   const isOpen = expanded.has(path);
   const isSelected = selectedDir === path;
   const entry = cache[path];
   const indent = depth * 12;
+
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const isDragOver =
+    dragActive &&
+    dragPosition != null &&
+    btnRef.current != null &&
+    (() => {
+      const rect = btnRef.current!.getBoundingClientRect();
+      return (
+        dragPosition.x >= rect.left &&
+        dragPosition.x <= rect.right &&
+        dragPosition.y >= rect.top &&
+        dragPosition.y <= rect.bottom
+      );
+    })();
+
   return (
     <div>
       <button
+        ref={btnRef}
         type="button"
+        data-dir-path={path}
         className={cn(
           "flex w-full items-center gap-1 rounded px-1 py-0.5 hover:bg-accent",
           isSelected && "bg-accent text-accent-foreground",
+          isDragOver && "bg-primary/20 ring-1 ring-primary/50",
         )}
         style={{ paddingLeft: indent + 4 }}
         onClick={() => {
@@ -173,6 +212,8 @@ function DirNode(props: {
                   onPickFile={onPickFile}
                   selectedDir={selectedDir}
                   onSelectDir={onSelectDir}
+                  dragActive={dragActive}
+                  dragPosition={dragPosition}
                 />
               ) : (
                 <FileNode key={child.path} entry={child} depth={depth + 1} onPick={onPickFile} />

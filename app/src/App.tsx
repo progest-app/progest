@@ -3,11 +3,14 @@ import { FolderOpen, FolderPlus, Sparkles } from "lucide-react";
 
 import { CommandPalette } from "@/components/command-palette";
 import { DirectoryInspector } from "@/components/directory-inspector";
+import { DragDropProvider, DropOverlay, useDropZone } from "@/components/drag-drop-overlay";
+import { dirPathAtPoint } from "@/components/tree-view";
 import { FileInspector } from "@/components/file-inspector";
-import { TreeView } from "@/components/tree-view";
 import { FlatView } from "@/components/flat-view";
+import { ImportModal } from "@/components/import-modal";
 import { InitProjectDialog } from "@/components/init-project-dialog";
 import { StatusBar } from "@/components/status-bar";
+import { TreeView } from "@/components/tree-view";
 import {
   ALL_PANELS_VISIBLE,
   TitleBar,
@@ -111,8 +114,31 @@ function Shell() {
 
   const selectedDir = selection?.kind === "dir" ? selection.path : "";
 
+  // --- import via drag & drop -----------------------------------------------
+  const [importSources, setImportSources] = React.useState<string[]>([]);
+  const [importDest, setImportDest] = React.useState<string | undefined>();
+  const [importOpen, setImportOpen] = React.useState(false);
+
+  const treeRef = React.useRef<HTMLElement>(null);
+
+  const handleDrop = React.useCallback(
+    (paths: string[], position: { x: number; y: number }) => {
+      if (!project || paths.length === 0) return;
+
+      // Check if the drop landed on a TreeView folder button by
+      // inspecting the DOM at the drop point.
+      const dirPath = dirPathAtPoint(position);
+      const dest = dirPath != null ? dirPath : undefined;
+
+      setImportSources(paths);
+      setImportDest(dest);
+      setImportOpen(true);
+    },
+    [project],
+  );
+
   return (
-    <>
+    <DragDropProvider onDrop={handleDrop}>
       <div className="grid h-screen grid-rows-[auto_1fr_auto] bg-background">
         <TitleBar panels={panels} onTogglePanel={togglePanel} />
         {project ? (
@@ -123,21 +149,22 @@ function Shell() {
             selectedDir={selectedDir}
             onSelectDir={onSelectDir}
             panels={panels}
+            treeRef={treeRef}
           />
         ) : (
           <Welcome />
         )}
         <StatusBar />
       </div>
-      {/*
-        CommandPalette is mounted globally so Cmd+K works even from the
-        Welcome screen. Hit picks now flow into the same selection slot
-        as TreeView / FlatView clicks — the file inspector renders the
-        details that used to live in the dialog.
-      */}
       <CommandPalette onPickHit={onPickFlatHit} />
       <InitProjectDialog />
-    </>
+      <ImportModal
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        sources={importSources}
+        initialDest={importDest}
+      />
+    </DragDropProvider>
   );
 }
 
@@ -148,18 +175,18 @@ function MainShell(props: {
   selectedDir: string;
   onSelectDir: (path: string) => void;
   panels: PanelVisibility;
+  treeRef: React.RefObject<HTMLElement | null>;
 }) {
-  // Build the panel list dynamically so hidden panels disappear from
-  // the Resizable group entirely (and so do their handles). Each
-  // ResizablePanel keeps its `id` so the library's persisted layout
-  // can rehydrate correctly when the panel returns.
+  const flatRef = React.useRef<HTMLElement>(null);
+  const flatDrop = useDropZone(flatRef);
+
   const panes: { key: PanelKey; node: React.ReactNode }[] = [];
   if (props.panels.tree) {
     panes.push({
       key: "tree",
       node: (
         <ResizablePanel id="tree" key="tree" defaultSize={22} minSize={12}>
-          <aside className="h-full overflow-hidden">
+          <aside ref={props.treeRef} className="h-full overflow-hidden">
             <TreeView
               onPickFile={props.onPickTreeFile}
               selectedDir={props.selectedDir}
@@ -175,8 +202,13 @@ function MainShell(props: {
       key: "flat",
       node: (
         <ResizablePanel id="flat" key="flat" defaultSize={40} minSize={20}>
-          <main className="h-full overflow-hidden">
+          <main ref={flatRef} className="relative h-full overflow-hidden">
             <FlatView onPickHit={props.onPickHit} />
+            <DropOverlay
+              isOver={flatDrop.isOver}
+              fileCount={flatDrop.fileCount}
+              label="Auto-suggest destination"
+            />
           </main>
         </ResizablePanel>
       ),
