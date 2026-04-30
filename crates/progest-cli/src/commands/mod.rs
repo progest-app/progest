@@ -12,6 +12,7 @@
 
 pub mod clean;
 pub mod doctor;
+pub mod import;
 pub mod init;
 pub mod lint;
 pub mod rename;

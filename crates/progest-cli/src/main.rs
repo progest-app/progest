@@ -11,6 +11,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand, ValueEnum};
 
 use commands::clean::{CaseFlag, CleanArgs, FillFlag};
+use commands::import::ImportArgs;
 use commands::lint::LintArgs;
 use commands::rename::{RenameArgs, RenameMode};
 use commands::search::SearchArgs;
@@ -121,6 +122,25 @@ enum Command {
         /// numeric index, padding, separator, and extension).
         #[arg(long, value_name = "STEM")]
         sequence_stem: Option<String>,
+    },
+    /// Import external files into the project (copy by default, --move to relocate).
+    Import {
+        /// Files to import (absolute or relative paths).
+        #[arg(value_name = "FILE", required = true)]
+        files: Vec<PathBuf>,
+        /// Destination directory inside the project (project-relative).
+        /// Defaults to project root.
+        #[arg(long)]
+        dest: Option<String>,
+        /// Move files instead of copying (destructive).
+        #[arg(long = "move")]
+        is_move: bool,
+        /// Preview only, don't actually import.
+        #[arg(long)]
+        dry_run: bool,
+        /// Output format.
+        #[arg(long, default_value = "text", value_enum)]
+        format: OutputFormat,
     },
     /// Search files using the Progest query DSL.
     Search {
@@ -334,6 +354,25 @@ fn main() -> Result<ExitCode> {
                     fill_mode,
                     placeholder,
                     sequence_stem,
+                },
+            )?;
+            Ok(to_exit_code(code))
+        }
+        Command::Import {
+            files,
+            dest,
+            is_move,
+            dry_run,
+            format,
+        } => {
+            let code = commands::import::run(
+                &cwd,
+                &ImportArgs {
+                    files,
+                    dest,
+                    is_move,
+                    dry_run,
+                    format,
                 },
             )?;
             Ok(to_exit_code(code))
