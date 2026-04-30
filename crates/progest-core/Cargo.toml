@@ -36,7 +36,6 @@ tempfile.workspace = true
 libheif-rs = { workspace = true, optional = true }
 
 [features]
-default = ["heic"]
 heic = ["dep:libheif-rs"]
 
 [dev-dependencies]
