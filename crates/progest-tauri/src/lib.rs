@@ -11,6 +11,7 @@ mod lint_commands;
 mod project_init_commands;
 mod recent;
 mod state;
+mod template_commands;
 
 use state::AppState;
 
@@ -72,6 +73,9 @@ pub fn run() {
             file_inspector_commands::tag_remove,
             file_inspector_commands::notes_read,
             file_inspector_commands::notes_write,
+            template_commands::template_export,
+            template_commands::template_preview,
+            template_commands::template_apply,
         ])
         .setup(|app| {
             // We build the main window programmatically rather than via
