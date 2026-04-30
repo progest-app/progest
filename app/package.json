@@ -15,6 +15,7 @@
     "check": "vp check && tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "^5.2.8",
     "@fontsource-variable/geist-mono": "^5.2.7",
     "@tailwindcss/vite": "^4.2.4",
     "@tanstack/react-table": "^8.21.3",
