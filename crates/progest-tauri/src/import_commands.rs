@@ -19,7 +19,7 @@ use progest_core::index::Index;
 use progest_core::meta::{StdMetaStore, load_dirmeta};
 use progest_core::thumbnail::{self, ThumbnailCache};
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Manager};
 
 use crate::commands::{load_alias_catalog_for_ctx, no_project_error};
 use crate::state::{AppState, ProjectContext};
@@ -109,122 +109,136 @@ pub struct ImportOutcomeWire {
 /// Given a list of source file paths, rank project directories by how
 /// well they accept each file's extension.  The frontend shows the
 /// top suggestions in the import modal.
+///
+/// Async so the directory walk doesn't block the UI thread.
 #[tauri::command]
-#[allow(clippy::needless_pass_by_value)]
-pub fn import_ranking(
+pub async fn import_ranking(
     sources: Vec<String>,
-    state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<ImportRankingResponse, String> {
-    let guard = state.project.lock().expect("project mutex poisoned");
-    let ctx = guard.as_ref().ok_or_else(no_project_error)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let guard = state.project.lock().expect("project mutex poisoned");
+        let ctx = guard.as_ref().ok_or_else(no_project_error)?;
 
-    let exts: Vec<String> = sources
-        .iter()
-        .filter_map(|s| {
-            Path::new(s)
-                .extension()
-                .and_then(|e| e.to_str())
-                .map(str::to_lowercase)
-        })
-        .collect();
-
-    let all_dirs = collect_all_dirs(ctx);
-
-    if exts.is_empty() {
-        return Ok(ImportRankingResponse {
-            suggestions: Vec::new(),
-            all_dirs,
-        });
-    }
-
-    let catalog = load_alias_catalog_for_ctx(ctx);
-    let dirs = collect_dirmeta_effective_accepts(ctx, &catalog);
-
-    let ext = normalize_ext(&exts[0]);
-    let ranked = rank_destinations(&dirs, &ext);
-
-    Ok(ImportRankingResponse {
-        suggestions: ranked
-            .into_iter()
-            .map(|s| SuggestedDestinationWire {
-                path: s.path.as_str().to_owned(),
-                score: s.score,
+        let exts: Vec<String> = sources
+            .iter()
+            .filter_map(|s| {
+                Path::new(s)
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .map(str::to_lowercase)
             })
-            .collect(),
-        all_dirs,
+            .collect();
+
+        let all_dirs = collect_all_dirs(ctx);
+
+        if exts.is_empty() {
+            return Ok(ImportRankingResponse {
+                suggestions: Vec::new(),
+                all_dirs,
+            });
+        }
+
+        let catalog = load_alias_catalog_for_ctx(ctx);
+        let dirs = collect_dirmeta_effective_accepts(ctx, &catalog);
+
+        let ext = normalize_ext(&exts[0]);
+        let ranked = rank_destinations(&dirs, &ext);
+
+        Ok(ImportRankingResponse {
+            suggestions: ranked
+                .into_iter()
+                .map(|s| SuggestedDestinationWire {
+                    path: s.path.as_str().to_owned(),
+                    score: s.score,
+                })
+                .collect(),
+            all_dirs,
+        })
     })
+    .await
+    .map_err(|e| format!("join: {e}"))?
 }
 
 /// Build a conflict-checked preview without mutating the filesystem.
 #[tauri::command]
-#[allow(clippy::needless_pass_by_value)]
-pub fn import_preview(
+pub async fn import_preview(
     requests: Vec<ImportRequestWire>,
-    state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<ImportPreviewWire, String> {
-    let guard = state.project.lock().expect("project mutex poisoned");
-    let ctx = guard.as_ref().ok_or_else(no_project_error)?;
-
     let reqs = wire_to_requests(&requests)?;
-    let preview = build_preview(&reqs, &ctx.fs, ctx.root.root());
-
-    Ok(preview_to_wire(&preview))
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let guard = state.project.lock().expect("project mutex poisoned");
+        let ctx = guard.as_ref().ok_or_else(no_project_error)?;
+        let preview = build_preview(&reqs, &ctx.fs, ctx.root.root());
+        Ok(preview_to_wire(&preview))
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
 }
 
 /// Apply a clean import atomically.  Fails if any op carries
 /// conflicts — the frontend should resolve them before calling.
+///
+/// Async + `spawn_blocking` so file copies and thumbnail generation
+/// don't freeze the UI.
 #[tauri::command]
-#[allow(clippy::needless_pass_by_value)]
-pub fn import_apply(
+pub async fn import_apply(
     requests: Vec<ImportRequestWire>,
-    state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<ImportOutcomeWire, String> {
-    let guard = state.project.lock().expect("project mutex poisoned");
-    let ctx = guard.as_ref().ok_or_else(no_project_error)?;
-
     let reqs = wire_to_requests(&requests)?;
-    let preview = build_preview(&reqs, &ctx.fs, ctx.root.root());
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let guard = state.project.lock().expect("project mutex poisoned");
+        let ctx = guard.as_ref().ok_or_else(no_project_error)?;
 
-    if !preview.is_clean() {
-        return Err(format!(
-            "cannot apply: {} conflict(s) remain",
-            preview.conflicting_ops().count()
-        ));
-    }
+        let preview = build_preview(&reqs, &ctx.fs, ctx.root.root());
 
-    let meta_store = StdMetaStore::new(ctx.fs.clone());
-    let history =
-        HistoryStore::open(&ctx.root.history_db()).map_err(|e| format!("open history: {e}"))?;
+        if !preview.is_clean() {
+            return Err(format!(
+                "cannot apply: {} conflict(s) remain",
+                preview.conflicting_ops().count()
+            ));
+        }
 
-    let driver = Import::new(&ctx.fs, &meta_store, &ctx.index, &history, ctx.root.root());
-    let outcome = driver.apply(&preview).map_err(|e| format!("apply: {e}"))?;
+        let meta_store = StdMetaStore::new(ctx.fs.clone());
+        let history =
+            HistoryStore::open(&ctx.root.history_db()).map_err(|e| format!("open history: {e}"))?;
 
-    // Generate thumbnails for newly imported files.
-    let cache = ThumbnailCache::new(
-        ctx.root.root().join(".progest/thumbs"),
-        thumbnail::DEFAULT_CACHE_MAX_BYTES,
-    );
-    let thumb_requests: Vec<thumbnail::ThumbnailRequest> = outcome
-        .imported
-        .iter()
-        .filter_map(|f| {
-            let row = ctx.index.get_file(&f.file_id).ok()??;
-            let abs_path = ctx.root.root().join(row.path.as_str());
-            Some(thumbnail::ThumbnailRequest {
-                path: row.path,
-                abs_path,
-                file_id: row.file_id,
-                fingerprint: row.fingerprint,
-                size: thumbnail::DEFAULT_MAX_DIM,
+        let driver = Import::new(&ctx.fs, &meta_store, &ctx.index, &history, ctx.root.root());
+        let outcome = driver.apply(&preview).map_err(|e| format!("apply: {e}"))?;
+
+        let cache = ThumbnailCache::new(
+            ctx.root.root().join(".progest/thumbs"),
+            thumbnail::DEFAULT_CACHE_MAX_BYTES,
+        );
+        let thumb_requests: Vec<thumbnail::ThumbnailRequest> = outcome
+            .imported
+            .iter()
+            .filter_map(|f| {
+                let row = ctx.index.get_file(&f.file_id).ok()??;
+                let abs_path = ctx.root.root().join(row.path.as_str());
+                Some(thumbnail::ThumbnailRequest {
+                    path: row.path,
+                    abs_path,
+                    file_id: row.file_id,
+                    fingerprint: row.fingerprint,
+                    size: thumbnail::DEFAULT_MAX_DIM,
+                })
             })
-        })
-        .collect();
+            .collect();
 
-    if !thumb_requests.is_empty() {
-        let _ = thumbnail::generate_batch(&thumb_requests, &cache, false);
-    }
+        if !thumb_requests.is_empty() {
+            let _ = thumbnail::generate_batch(&thumb_requests, &cache, false);
+        }
 
-    Ok(outcome_to_wire(&outcome))
+        Ok(outcome_to_wire(&outcome))
+    })
+    .await
+    .map_err(|e| format!("join: {e}"))?
 }
 
 // ------------------------------------------------------------------- helpers

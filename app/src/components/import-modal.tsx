@@ -7,6 +7,7 @@ import {
   FileWarning,
   Folder,
   FolderInput,
+  Loader2,
   Scissors,
   Star,
 } from "lucide-react";
@@ -337,9 +338,14 @@ export function ImportModal(props: ImportModalProps) {
             Cancel
           </Button>
           <Button onClick={() => void handleApply()} disabled={busy || !preview?.clean}>
-            {busy
-              ? "Importing…"
-              : `Import ${sources.length} file${sources.length === 1 ? "" : "s"}`}
+            {busy ? (
+              <>
+                <Loader2 className="size-3.5 mr-1 animate-spin" />
+                Importing…
+              </>
+            ) : (
+              `Import ${sources.length} file${sources.length === 1 ? "" : "s"}`
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
