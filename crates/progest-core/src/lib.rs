@@ -25,6 +25,7 @@ pub mod rules;
 pub mod search;
 pub mod sequence;
 pub mod tag;
+pub mod template;
 pub mod thumbnail;
 pub mod watch;
 
