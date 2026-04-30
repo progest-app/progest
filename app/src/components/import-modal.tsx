@@ -7,10 +7,11 @@ import {
   FileWarning,
   Folder,
   FolderInput,
-  Loader2,
   Scissors,
   Star,
 } from "lucide-react";
+
+import { DotmSquare8 } from "@/components/ui/dotm-square-8";
 
 import {
   importApply,
@@ -340,7 +341,7 @@ export function ImportModal(props: ImportModalProps) {
           <Button onClick={() => void handleApply()} disabled={busy || !preview?.clean}>
             {busy ? (
               <>
-                <Loader2 className="size-3.5 mr-1 animate-spin" />
+                <DotmSquare8 size={16} dotSize={2} animated className="mr-1.5" />
                 Importing…
               </>
             ) : (
