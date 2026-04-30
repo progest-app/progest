@@ -10,7 +10,7 @@
 
 ## 0. 進捗スナップショット
 
-最終更新: 2026-04-30（**M4 進行中**。`core::import` + CLI import 完了、`core::thumbnail` + CLI thumbnail + reconcile hook 完了。次は D&D import UI + thumbnail 統合）
+最終更新: 2026-04-30（**M4 進行中**。import + thumbnail + template 完了。次は D&D import UI + thumbnail 統合 → AI）
 
 - **M0 Skeleton**: 完了
 - **M1 Core data layer**: 完了 — `core::fs` / `core::identity` / `core::meta` / `core::index` / `core::reconcile` / `core::watch` / `core::project` + CLI `init`/`scan`/`doctor` + 10k-file incremental scan ベンチ（実測 ~82 ms、5 s gate の 60 倍下回り）
@@ -67,7 +67,7 @@
   - [x] CLI `progest thumbnail generate [PATH...] [--force] [--size] [--format]` + `progest thumbnail clean [--format]`
   - [x] `progest scan` 後の post-reconcile thumbnail 自動生成
   - [ ] D&D import UI + thumbnail 統合（grid view サムネ表示）— 次着手
-  - [ ] `core::template` + CLI/UI
+  - [x] `core::template` — 単一 TOML テンプレート（ディレクトリ構造 + rules/schema/views/dirmeta 埋め込み）、export + apply + serialize/deserialize。CLI `progest template export/apply` + `progest init --template`。Tauri IPC `template_export/preview/apply`。8 unit test
   - [ ] `core::ai` + UI（BYOK + 命名/タグ/notes/配置先提案）
   - [ ] M4 polish + docs（doctor staging cleanup + undo wiring）
 
