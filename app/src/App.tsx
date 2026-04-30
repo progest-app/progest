@@ -24,6 +24,7 @@ import { FlatViewSummaryProvider } from "@/lib/flat-view-context";
 import { ProjectProvider, useProject } from "@/lib/project-context";
 import { ThemeProvider } from "next-themes";
 import type { DirEntry, RichSearchHit } from "@/lib/ipc";
+import { Toaster } from "@/components/ui/sonner";
 
 import "./App.css";
 
@@ -67,6 +68,7 @@ export function App() {
             <Shell />
           </FlatViewSummaryProvider>
         </ProjectProvider>
+        <Toaster position="bottom-right" />
       </TooltipProvider>
     </ThemeProvider>
   );
