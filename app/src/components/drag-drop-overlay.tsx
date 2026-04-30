@@ -16,11 +16,12 @@ const DragDropCtx = React.createContext<DragDropContextValue>({
   state: { active: false, paths: [], position: null },
 });
 
-/**
- * Check whether the current drag cursor is within a given element.
- * Returns `isOver` plus the drop-zone label (for the import modal to
- * know whether the drop landed on a tree directory or the flat pane).
- */
+/** Convert Tauri PhysicalPosition to CSS logical pixels. */
+function toLogical(pos: { x: number; y: number }): { x: number; y: number } {
+  const dpr = window.devicePixelRatio || 1;
+  return { x: pos.x / dpr, y: pos.y / dpr };
+}
+
 export function useDropZone(ref: React.RefObject<HTMLElement | null>): {
   isOver: boolean;
   fileCount: number;
@@ -30,32 +31,17 @@ export function useDropZone(ref: React.RefObject<HTMLElement | null>): {
   const isOver = React.useMemo(() => {
     if (!state.active || !state.position || !ref.current) return false;
     const rect = ref.current.getBoundingClientRect();
-    return (
-      state.position.x >= rect.left &&
-      state.position.x <= rect.right &&
-      state.position.y >= rect.top &&
-      state.position.y <= rect.bottom
-    );
+    const pos = state.position;
+    return pos.x >= rect.left && pos.x <= rect.right && pos.y >= rect.top && pos.y <= rect.bottom;
   }, [state.active, state.position, ref]);
 
   return { isOver, fileCount: state.paths.length };
 }
 
-/**
- * Expose the raw drag state for components that need fine-grained
- * hit-testing (e.g. TreeView folder highlight).
- */
 export function useDragActive(): DragDropState {
   return React.useContext(DragDropCtx).state;
 }
 
-/**
- * Full-window provider that listens to Tauri's native drag-drop events.
- * Individual panes use `useDropZone(ref)` to show per-pane overlays.
- *
- * When the user drops, `onDrop` fires with the absolute file paths
- * and the drop position (to determine which pane received the drop).
- */
 export function DragDropProvider(props: {
   children: React.ReactNode;
   onDrop: (paths: string[], position: { x: number; y: number }) => void;
@@ -65,6 +51,9 @@ export function DragDropProvider(props: {
     paths: [],
     position: null,
   });
+
+  const onDropRef = React.useRef(props.onDrop);
+  onDropRef.current = props.onDrop;
 
   React.useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -77,17 +66,20 @@ export function DragDropProvider(props: {
           setState({
             active: true,
             paths: p.paths,
-            position: p.position,
+            position: toLogical(p.position),
           });
         } else if (p.type === "over") {
           setState((prev) => ({
             ...prev,
-            position: p.position,
+            position: toLogical(p.position),
           }));
         } else if (p.type === "drop") {
+          const logicalPos = toLogical(p.position);
           setState((prev) => {
             const paths = prev.paths.length > 0 ? prev.paths : p.paths;
-            props.onDrop(paths, p.position);
+            // Schedule the callback outside the state updater to avoid
+            // side effects inside setState.
+            queueMicrotask(() => onDropRef.current(paths, logicalPos));
             return { active: false, paths: [], position: null };
           });
         } else {
@@ -101,17 +93,13 @@ export function DragDropProvider(props: {
     return () => {
       unlisten?.();
     };
-  }, [props.onDrop]);
+  }, []);
 
   const ctxValue = React.useMemo(() => ({ state }), [state]);
 
   return <DragDropCtx.Provider value={ctxValue}>{props.children}</DragDropCtx.Provider>;
 }
 
-/**
- * Per-pane drop overlay — render as a sibling of the pane content
- * inside a `relative` container.
- */
 export function DropOverlay(props: { isOver: boolean; fileCount: number; label?: string }) {
   if (!props.isOver) return null;
   return (

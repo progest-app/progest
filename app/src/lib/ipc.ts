@@ -466,7 +466,7 @@ export async function importApply(requests: ImportRequestWire[]): Promise<Import
 // --- thumbnail -------------------------------------------------------------
 
 export type ThumbnailPathsResponse = {
-  paths: Record<string, string>;
+  urls: Record<string, string>;
 };
 
 export async function thumbnailPaths(fileIds: string[]): Promise<ThumbnailPathsResponse> {

@@ -113,8 +113,8 @@ export function ImportModal(props: ImportModalProps) {
     };
   }, [open, sources, dest, mode, initialDest]);
 
-  const handleApply = React.useCallback(async () => {
-    if (!preview || !preview.clean) return;
+  const handleApply = async () => {
+    if (!preview || !preview.clean || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -131,7 +131,7 @@ export function ImportModal(props: ImportModalProps) {
     } finally {
       setBusy(false);
     }
-  }, [preview, sources, dest, mode, bumpRefresh]);
+  };
 
   const fileNames = React.useMemo(() => sources.map((s) => s.split("/").pop() ?? s), [sources]);
 

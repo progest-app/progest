@@ -4,6 +4,7 @@ import { FolderOpen, FolderPlus, Sparkles } from "lucide-react";
 import { CommandPalette } from "@/components/command-palette";
 import { DirectoryInspector } from "@/components/directory-inspector";
 import { DragDropProvider, DropOverlay, useDropZone } from "@/components/drag-drop-overlay";
+import { dirPathAtPoint } from "@/components/tree-view";
 import { FileInspector } from "@/components/file-inspector";
 import { FlatView } from "@/components/flat-view";
 import { ImportModal } from "@/components/import-modal";
@@ -119,28 +120,15 @@ function Shell() {
   const [importOpen, setImportOpen] = React.useState(false);
 
   const treeRef = React.useRef<HTMLElement>(null);
-  const dragHoverDirRef = React.useRef<string | null>(null);
 
   const handleDrop = React.useCallback(
     (paths: string[], position: { x: number; y: number }) => {
       if (!project || paths.length === 0) return;
 
-      // If the drop lands on the tree pane and a specific folder is
-      // highlighted, use that folder as the destination.
-      let dest: string | undefined;
-      if (treeRef.current) {
-        const rect = treeRef.current.getBoundingClientRect();
-        if (
-          position.x >= rect.left &&
-          position.x <= rect.right &&
-          position.y >= rect.top &&
-          position.y <= rect.bottom &&
-          dragHoverDirRef.current != null
-        ) {
-          dest = dragHoverDirRef.current;
-        }
-      }
-      dragHoverDirRef.current = null;
+      // Check if the drop landed on a TreeView folder button by
+      // inspecting the DOM at the drop point.
+      const dirPath = dirPathAtPoint(position);
+      const dest = dirPath != null ? dirPath : undefined;
 
       setImportSources(paths);
       setImportDest(dest);
@@ -162,7 +150,6 @@ function Shell() {
             onSelectDir={onSelectDir}
             panels={panels}
             treeRef={treeRef}
-            dragHoverDirRef={dragHoverDirRef}
           />
         ) : (
           <Welcome />
@@ -189,7 +176,6 @@ function MainShell(props: {
   onSelectDir: (path: string) => void;
   panels: PanelVisibility;
   treeRef: React.RefObject<HTMLElement | null>;
-  dragHoverDirRef: React.MutableRefObject<string | null>;
 }) {
   const flatRef = React.useRef<HTMLElement>(null);
   const flatDrop = useDropZone(flatRef);
@@ -205,7 +191,6 @@ function MainShell(props: {
               onPickFile={props.onPickTreeFile}
               selectedDir={props.selectedDir}
               onSelectDir={props.onSelectDir}
-              dragHoverDirRef={props.dragHoverDirRef}
             />
           </aside>
         </ResizablePanel>

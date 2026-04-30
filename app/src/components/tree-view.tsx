@@ -16,16 +16,24 @@ type DirState = {
   error?: string;
 };
 
+/**
+ * Given a CSS-pixel position, find the closest `[data-dir-path]`
+ * ancestor of the element under that point.  Returns the path string
+ * or `null` if the cursor is not over any DirNode.
+ */
+export function dirPathAtPoint(pos: { x: number; y: number }): string | null {
+  const el = document.elementFromPoint(pos.x, pos.y);
+  const btn = el?.closest("[data-dir-path]");
+  if (!btn) return null;
+  return btn.getAttribute("data-dir-path");
+}
+
 export function TreeView(props: {
   onPickFile?: (entry: DirEntry) => void;
   selectedDir?: string;
   onSelectDir?: (path: string) => void;
-  /** Ref updated with the path of the directory currently under the drag cursor. */
-  dragHoverDirRef?: React.MutableRefObject<string | null>;
 }) {
   const { project, refreshTick } = useProject();
-  // path "" = root; cache keeps loaded children + error per path so
-  // collapsing/re-expanding doesn't re-fetch.
   const [cache, setCache] = React.useState<Record<string, DirState>>({});
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set([""]));
 
@@ -46,20 +54,12 @@ export function TreeView(props: {
     }
   }, []);
 
-  // Reset cache + expanded set when the attached project changes,
-  // then refetch the new root. Without this, the tree would keep
-  // showing the old project's directory snapshot until the user
-  // collapsed and re-expanded each branch.
   React.useEffect(() => {
     setCache({});
     setExpanded(new Set([""]));
     void fetchDir("");
   }, [project?.root, fetchDir]);
 
-  // `refreshTick` is bumped by long-lived workflows that mutate
-  // indexed state (accepts edits → lint refresh). Drop the cache and
-  // re-fetch every currently-expanded path so the badges update
-  // without forcing the user to collapse / re-expand each branch.
   const expandedSnapshot = React.useRef(expanded);
   expandedSnapshot.current = expanded;
   React.useEffect(() => {
@@ -102,7 +102,6 @@ export function TreeView(props: {
         onSelectDir={props.onSelectDir}
         dragActive={dragState.active}
         dragPosition={dragState.position}
-        dragHoverDirRef={props.dragHoverDirRef}
       />
     </nav>
   );
@@ -120,7 +119,6 @@ function DirNode(props: {
   onSelectDir: ((path: string) => void) | undefined;
   dragActive: boolean;
   dragPosition: { x: number; y: number } | null;
-  dragHoverDirRef: React.MutableRefObject<string | null> | undefined;
 }) {
   const {
     path,
@@ -134,7 +132,6 @@ function DirNode(props: {
     onSelectDir,
     dragActive,
     dragPosition,
-    dragHoverDirRef,
   } = props;
   const isOpen = expanded.has(path);
   const isSelected = selectedDir === path;
@@ -156,15 +153,12 @@ function DirNode(props: {
       );
     })();
 
-  if (isDragOver && dragHoverDirRef) {
-    dragHoverDirRef.current = path;
-  }
-
   return (
     <div>
       <button
         ref={btnRef}
         type="button"
+        data-dir-path={path}
         className={cn(
           "flex w-full items-center gap-1 rounded px-1 py-0.5 hover:bg-accent",
           isSelected && "bg-accent text-accent-foreground",
@@ -220,7 +214,6 @@ function DirNode(props: {
                   onSelectDir={onSelectDir}
                   dragActive={dragActive}
                   dragPosition={dragPosition}
-                  dragHoverDirRef={dragHoverDirRef}
                 />
               ) : (
                 <FileNode key={child.path} entry={child} depth={depth + 1} onPick={onPickFile} />

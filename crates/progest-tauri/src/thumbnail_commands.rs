@@ -1,9 +1,7 @@
 //! IPC commands for thumbnail retrieval.
 //!
-//! Thumbnails are served via Tauri's asset protocol — the frontend
-//! calls `thumbnail_paths` with a batch of file IDs and receives
-//! absolute filesystem paths that can be converted to asset URLs
-//! with `convertFileSrc()`.
+//! Returns base64-encoded data URLs so the frontend can use them
+//! directly as `<img src>` without asset-protocol scope configuration.
 
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -18,21 +16,19 @@ use crate::commands::no_project_error;
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
-pub struct ThumbnailPathsResponse {
-    pub paths: HashMap<String, String>,
+pub struct ThumbnailUrlsResponse {
+    pub urls: HashMap<String, String>,
 }
 
-/// Return absolute thumbnail paths for a batch of file IDs.
+/// Return base64 data-URL thumbnails for a batch of file IDs.
 ///
-/// The frontend converts these to asset-protocol URLs via
-/// `convertFileSrc()` and uses them as `<img src>`.  Files without
-/// a cached thumbnail are silently omitted from the map.
+/// Files without a cached thumbnail are silently omitted from the map.
 #[tauri::command]
 #[allow(clippy::needless_pass_by_value)]
 pub fn thumbnail_paths(
     file_ids: Vec<String>,
     state: State<'_, AppState>,
-) -> Result<ThumbnailPathsResponse, String> {
+) -> Result<ThumbnailUrlsResponse, String> {
     let guard = state.project.lock().expect("project mutex poisoned");
     let ctx = guard.as_ref().ok_or_else(no_project_error)?;
 
@@ -41,7 +37,7 @@ pub fn thumbnail_paths(
         DEFAULT_CACHE_MAX_BYTES,
     );
 
-    let mut paths = HashMap::new();
+    let mut urls = HashMap::new();
 
     for fid_str in &file_ids {
         let Ok(file_id) = FileId::from_str(fid_str) else {
@@ -58,11 +54,13 @@ pub fn thumbnail_paths(
         };
 
         if let Some(abs_path) = cache.get(&key)
-            && let Some(s) = abs_path.to_str()
+            && let Ok(bytes) = std::fs::read(&abs_path)
         {
-            paths.insert(fid_str.clone(), s.to_owned());
+            use base64::Engine;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+            urls.insert(fid_str.clone(), format!("data:image/webp;base64,{b64}"));
         }
     }
 
-    Ok(ThumbnailPathsResponse { paths })
+    Ok(ThumbnailUrlsResponse { urls })
 }
